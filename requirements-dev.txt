@@ -4,3 +4,6 @@
 pytest>=9.1,<10.0
 ruff>=0.16,<0.17
 mypy>=2.3,<3.0
+
+# Type stubs (the markdown package ships no inline annotations)
+types-Markdown>=3.10,<4.0

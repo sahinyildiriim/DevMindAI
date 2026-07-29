@@ -41,9 +41,10 @@ Cross-cutting concerns available to every layer:
 
 Enterprise rules, expressed with plain Python objects:
 
-- `entities/` - objects with identity (document, chunk, answer).
-- `value_objects/` - immutable concepts without identity.
+- `entities/` - `ParsedDocument`, the common result of every parser.
+- `value_objects/` - `DocumentFormat`, `DocumentMetadata`.
 - `repositories/` - abstract persistence contracts.
+- `exceptions.py` - document errors under `DocumentError`.
 
 Depends on the standard library and `core` only.
 
@@ -71,6 +72,30 @@ Adapters implementing the abstractions above:
 
 The delivery mechanism: Streamlit pages and components. It calls use cases and
 renders DTOs; it contains no business logic.
+
+## Document parsing
+
+Parsing is deliberately split across three layers:
+
+- `domain` owns the vocabulary: `DocumentFormat` (the single source of
+  truth for supported extensions), `DocumentMetadata` and the common
+  result model `ParsedDocument`.
+- `application` owns the contracts: `DocumentParser` and
+  `DocumentParserRegistry`.
+- `infrastructure` owns the adapters: one parser per format, plus the
+  registry that resolves a file to its parser in constant time.
+
+`FileDocumentParser` is a template method. It performs everything that
+is identical for every format - validation, SHA-256 checksumming,
+metadata assembly, whitespace normalisation, logging and translation of
+third party exceptions into `DocumentParseError` - and leaves a single
+`extract()` hook to the concrete parsers. Adding a format therefore
+means adding one enum member and one small class, and touching nothing
+else.
+
+Size limits are enforced before any content is read, and the checksum is
+streamed in blocks, so memory usage stays flat regardless of document
+size.
 
 ## Configuration
 

@@ -20,6 +20,19 @@ corpus.
 - ASP.NET Core Documentation
 - .NET Architecture Guides
 
+## Supported documents
+
+| Format     | Extensions          | Extracted metadata            |
+| ---------- | ------------------- | ----------------------------- |
+| PDF        | `.pdf`              | Title, author, page count     |
+| Word       | `.docx`             | Title, author                 |
+| Markdown   | `.md`, `.markdown`  | Front matter, first heading   |
+| Plain text | `.txt`              | Title derived from first line |
+
+Whatever the format, parsing yields the same `ParsedDocument`: normalised
+plain text plus uniform metadata, including a SHA-256 checksum used to
+detect duplicates and changes between ingestion runs.
+
 ## Highlights
 
 - **100% local** - inference runs on Foundry Local; nothing is sent to a remote API.
@@ -144,8 +157,8 @@ mypy devmind
 | Sprint | Scope                                              | Status      |
 | ------ | -------------------------------------------------- | ----------- |
 | 0      | Project skeleton, configuration, logging            | Done        |
-| 1      | Domain model and repository contracts               | Planned     |
-| 2      | Document parsing and chunking                       | Planned     |
+| 1      | Document parsers and the common result model        | Done        |
+| 2      | Chunking                                            | Planned     |
 | 3      | SQLite persistence and embedding storage            | Planned     |
 | 4      | Retrieval and grounded answer generation            | Planned     |
 | 5      | Streamlit user interface                            | Planned     |

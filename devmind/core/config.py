@@ -256,16 +256,10 @@ class DocumentConfig:
 
     source_directory: Path = PROJECT_ROOT / "data" / "documents"
     max_file_size_mb: int = 25
-    supported_extensions: tuple[str, ...] = (".pdf", ".docx", ".md", ".txt")
 
     def __post_init__(self) -> None:
-        """Validate size limits and supported file types."""
+        """Validate the ingestion size limit."""
         _require(self.max_file_size_mb > 0, "Max file size must be greater than zero.")
-        _require(bool(self.supported_extensions), "At least one extension must be supported.")
-        _require(
-            all(ext.startswith(".") and ext == ext.lower() for ext in self.supported_extensions),
-            "Supported extensions must be lowercase and start with a dot.",
-        )
 
     @property
     def max_file_size_bytes(self) -> int:
