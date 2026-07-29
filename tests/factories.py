@@ -13,11 +13,12 @@ from pathlib import Path
 
 import docx
 
-from devmind.domain.entities import ParsedDocument
-from devmind.domain.value_objects import DocumentFormat, DocumentMetadata
+from devmind.domain.entities import DocumentChunk, ParsedDocument
+from devmind.domain.value_objects import ChunkId, DocumentFormat, DocumentMetadata, Embedding
 
 CHECKSUM = "a1b2c3d4e5f60718" + "0" * 48
 MODIFIED_AT = datetime(2026, 7, 29, 12, 0, tzinfo=UTC)
+CHUNK_CONTENT = "Endpoint routing matches requests."
 
 
 def make_metadata(**overrides: object) -> DocumentMetadata:
@@ -35,6 +36,43 @@ def make_metadata(**overrides: object) -> DocumentMetadata:
 def make_document(content: str, **overrides: object) -> ParsedDocument:
     """Build a parsed document carrying ``content``."""
     return ParsedDocument(content=content, metadata=make_metadata(**overrides))
+
+
+def make_chunk(**overrides: object) -> DocumentChunk:
+    """Build a single chunk with consistent defaults."""
+    defaults: dict[str, object] = {
+        "chunk_id": ChunkId.for_document(CHECKSUM, 0),
+        "content": CHUNK_CONTENT,
+        "index": 0,
+        "start_offset": 10,
+        "end_offset": 10 + len(CHUNK_CONTENT),
+        "metadata": make_metadata(),
+    }
+    return DocumentChunk(**(defaults | overrides))  # type: ignore[arg-type]
+
+
+def make_chunks(metadata: DocumentMetadata, contents: Sequence[str]) -> tuple[DocumentChunk, ...]:
+    """Build sequentially indexed chunks belonging to one document."""
+    chunks: list[DocumentChunk] = []
+    offset = 0
+    for index, content in enumerate(contents):
+        chunks.append(
+            DocumentChunk(
+                chunk_id=ChunkId.for_document(metadata.checksum, index),
+                content=content,
+                index=index,
+                start_offset=offset,
+                end_offset=offset + len(content),
+                metadata=metadata,
+            )
+        )
+        offset += len(content) + 1
+    return tuple(chunks)
+
+
+def make_embedding(dimensions: int = 4, *, model: str = "all-minilm-l6-v2") -> Embedding:
+    """Build an embedding with reproducible components."""
+    return Embedding(model=model, vector=tuple(index / 10 for index in range(dimensions)))
 
 
 _CATALOG_ID = 1

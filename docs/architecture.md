@@ -43,8 +43,10 @@ Enterprise rules, expressed with plain Python objects:
 
 - `entities/` - `ParsedDocument`, the common result of every parser,
   and `DocumentChunk`, the unit of retrieval.
-- `value_objects/` - `DocumentFormat`, `DocumentMetadata`, `ChunkId`.
-- `repositories/` - abstract persistence contracts.
+- `value_objects/` - `DocumentFormat`, `DocumentMetadata`, `ChunkId`,
+  `Embedding`.
+- `repositories/` - abstract persistence contracts, one per table
+  family, implemented by the infrastructure layer.
 - `exceptions.py` - document errors under `DocumentError`.
 
 Depends on the standard library and `core` only.
@@ -126,6 +128,46 @@ Two invariants make chunks trustworthy downstream:
 - `ChunkId` is derived from the document checksum and the chunk index,
   so re-ingesting an unchanged document reproduces the same identifiers
   and the index can be replaced instead of duplicated.
+
+## Persistence
+
+The knowledge base is a single SQLite file. Four tables hold everything:
+
+| Table        | Holds                                            |
+| ------------ | ------------------------------------------------ |
+| `metadata`   | Key/value state of the index, incl. schema version |
+| `documents`  | One row per indexed file                          |
+| `chunks`     | One row per chunk, referencing its document       |
+| `embeddings` | At most one vector per chunk                      |
+
+Two rules keep the data honest:
+
+- **Nothing derived is stored.** File names, character counts and word
+  counts are computed from what is stored, so a fact can never disagree
+  with itself.
+- **Deletion cascades.** Removing a document removes its chunks, and
+  removing a chunk removes its embedding, through foreign keys rather
+  than through application code. `PRAGMA foreign_keys` is set on every
+  connection, since SQLite leaves it off by default.
+
+A document is identified by its source path: re-indexing the same file
+updates its row and keeps the row identity, while the checksum tells
+whether the content actually changed. The integer primary key exists
+only to keep foreign keys compact and never leaves the persistence
+layer, so the domain stays free of database artifacts.
+
+`SqliteDatabase` is the only module that imports `sqlite3`. It owns the
+connection lifecycle, applies the pragmas, wraps statements in
+transactions and translates every `sqlite3` failure into `StorageError`.
+Connections are thread-local, because a `sqlite3` connection may not be
+shared between threads and Streamlit serves each interaction from its
+own thread; write-ahead logging keeps readers and the single writer out
+of each other's way.
+
+Embedding vectors are stored as little-endian 32-bit floats. Narrowing
+from Python's doubles turns an out-of-range value into infinity rather
+than failing, so the encoder checks its own result instead of trusting
+it.
 
 ## Configuration
 

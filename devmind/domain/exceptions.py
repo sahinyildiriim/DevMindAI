@@ -15,6 +15,7 @@ __all__ = [
     "DocumentParseError",
     "DocumentTooLargeError",
     "EmptyDocumentError",
+    "StorageError",
     "UnsupportedFormatError",
 ]
 
@@ -44,4 +45,13 @@ class EmptyDocumentError(DocumentParseError):
 
     Typically caused by scanned or image-only documents, which carry no
     text layer and would silently pollute the index with empty entries.
+    """
+
+
+class StorageError(DevMindError):
+    """Raised when the knowledge base cannot be read or written.
+
+    Repository contracts are declared by the domain, so the failure mode
+    they promise belongs here rather than to a specific database
+    technology.
     """

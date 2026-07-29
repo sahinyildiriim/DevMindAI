@@ -5,23 +5,9 @@ from __future__ import annotations
 import pytest
 
 from devmind.core.exceptions import DevMindError
-from devmind.domain.entities import DocumentChunk
-from devmind.domain.value_objects import ChunkId
-from tests.factories import CHECKSUM, make_metadata
+from tests.factories import CHECKSUM, CHUNK_CONTENT, make_chunk
 
-_CONTENT = "Endpoint routing matches requests."
-
-
-def make_chunk(**overrides: object) -> DocumentChunk:
-    defaults: dict[str, object] = {
-        "chunk_id": ChunkId.for_document(CHECKSUM, 0),
-        "content": _CONTENT,
-        "index": 0,
-        "start_offset": 10,
-        "end_offset": 10 + len(_CONTENT),
-        "metadata": make_metadata(),
-    }
-    return DocumentChunk(**(defaults | overrides))  # type: ignore[arg-type]
+_CONTENT = CHUNK_CONTENT
 
 
 def test_chunk_reports_its_size_and_keeps_the_document_metadata() -> None:
