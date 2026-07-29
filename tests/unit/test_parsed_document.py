@@ -3,29 +3,14 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
-from pathlib import Path
+from datetime import datetime
 
 import pytest
 
 from devmind.core.exceptions import DevMindError
 from devmind.domain.entities import ParsedDocument
 from devmind.domain.exceptions import EmptyDocumentError
-from devmind.domain.value_objects import DocumentFormat, DocumentMetadata
-
-_CHECKSUM = "a" * 64
-_MODIFIED_AT = datetime(2026, 7, 29, 12, 0, tzinfo=UTC)
-
-
-def make_metadata(**overrides: object) -> DocumentMetadata:
-    defaults: dict[str, object] = {
-        "source_path": Path("data/documents/guide.md"),
-        "document_format": DocumentFormat.MARKDOWN,
-        "size_bytes": 128,
-        "checksum": _CHECKSUM,
-        "modified_at": _MODIFIED_AT,
-    }
-    return DocumentMetadata(**(defaults | overrides))  # type: ignore[arg-type]
+from tests.factories import make_metadata
 
 
 def test_metadata_exposes_file_name_and_display_title() -> None:

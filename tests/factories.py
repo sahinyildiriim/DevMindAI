@@ -1,15 +1,41 @@
-"""Builders that produce real document files for the parser tests.
+"""Builders for the fixtures shared across the test suite.
 
-Parsers are adapters around third party libraries, so the tests feed
-them genuine PDF and DOCX bytes instead of mocks.
+Domain objects get sensible defaults, and parsers - being adapters
+around third party libraries - are fed genuine PDF and DOCX bytes
+instead of mocks.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 
 import docx
+
+from devmind.domain.entities import ParsedDocument
+from devmind.domain.value_objects import DocumentFormat, DocumentMetadata
+
+CHECKSUM = "a1b2c3d4e5f60718" + "0" * 48
+MODIFIED_AT = datetime(2026, 7, 29, 12, 0, tzinfo=UTC)
+
+
+def make_metadata(**overrides: object) -> DocumentMetadata:
+    """Build document metadata with sensible defaults for tests."""
+    defaults: dict[str, object] = {
+        "source_path": Path("data/documents/guide.md"),
+        "document_format": DocumentFormat.MARKDOWN,
+        "size_bytes": 128,
+        "checksum": CHECKSUM,
+        "modified_at": MODIFIED_AT,
+    }
+    return DocumentMetadata(**(defaults | overrides))  # type: ignore[arg-type]
+
+
+def make_document(content: str, **overrides: object) -> ParsedDocument:
+    """Build a parsed document carrying ``content``."""
+    return ParsedDocument(content=content, metadata=make_metadata(**overrides))
+
 
 _CATALOG_ID = 1
 _PAGES_ID = 2

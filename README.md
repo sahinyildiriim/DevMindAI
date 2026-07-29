@@ -158,7 +158,7 @@ mypy devmind
 | ------ | -------------------------------------------------- | ----------- |
 | 0      | Project skeleton, configuration, logging            | Done        |
 | 1      | Document parsers and the common result model        | Done        |
-| 2      | Chunking                                            | Planned     |
+| 2      | Chunking engine with configurable size and overlap  | Done        |
 | 3      | SQLite persistence and embedding storage            | Planned     |
 | 4      | Retrieval and grounded answer generation            | Planned     |
 | 5      | Streamlit user interface                            | Planned     |

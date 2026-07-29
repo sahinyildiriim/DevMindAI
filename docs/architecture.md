@@ -41,8 +41,9 @@ Cross-cutting concerns available to every layer:
 
 Enterprise rules, expressed with plain Python objects:
 
-- `entities/` - `ParsedDocument`, the common result of every parser.
-- `value_objects/` - `DocumentFormat`, `DocumentMetadata`.
+- `entities/` - `ParsedDocument`, the common result of every parser,
+  and `DocumentChunk`, the unit of retrieval.
+- `value_objects/` - `DocumentFormat`, `DocumentMetadata`, `ChunkId`.
 - `repositories/` - abstract persistence contracts.
 - `exceptions.py` - document errors under `DocumentError`.
 
@@ -65,6 +66,7 @@ Adapters implementing the abstractions above:
 
 - `persistence/` - SQLite repositories.
 - `parsers/` - PDF, DOCX, Markdown and plain-text readers.
+- `chunking/` - strategies that split documents for retrieval.
 - `embeddings/` - vector generation through Foundry Local.
 - `llm/` - chat completion through Foundry Local.
 
@@ -96,6 +98,34 @@ else.
 Size limits are enforced before any content is read, and the checksum is
 streamed in blocks, so memory usage stays flat regardless of document
 size.
+
+## Chunking
+
+Chunking follows the same three-layer split as parsing:
+
+- `domain` owns `DocumentChunk` and its identity `ChunkId`.
+- `application` owns the `TextChunker` port.
+- `infrastructure` owns `SlidingWindowChunker`, the default strategy.
+
+The chunker is an adapter rather than a domain service, because the
+strategy is interchangeable: a future semantic chunker will need an
+embedding model, and it belongs next to the one shipped today.
+
+Chunks overlap by a configurable number of characters, so a sentence
+straddling a cut point stays retrievable from both sides. Cut points are
+pulled back to the closest structural boundary - paragraph, line,
+sentence, then word - as long as it lies within a fifth of the chunk
+size; otherwise the text is cut exactly at the limit, which keeps
+pathological input (a single long token) bounded.
+
+Two invariants make chunks trustworthy downstream:
+
+- `document.content[chunk.start_offset:chunk.end_offset] == chunk.content`,
+  which is what lets a later citation point at the exact passage. It is
+  enforced by `DocumentChunk` itself, not only by the chunker.
+- `ChunkId` is derived from the document checksum and the chunk index,
+  so re-ingesting an unchanged document reproduces the same identifiers
+  and the index can be replaced instead of duplicated.
 
 ## Configuration
 
