@@ -16,7 +16,7 @@ from devmind.infrastructure.persistence.mappers import (
     JOINED_DOCUMENT_COLUMNS,
     path_key,
     to_document_chunk,
-    to_document_metadata,
+    to_document_chunks,
 )
 
 __all__ = ["SqliteChunkRepository"]
@@ -32,6 +32,15 @@ _SELECT_CHUNKS: Final[str] = f"""
 _INSERT: Final[str] = """
     INSERT INTO chunks (chunk_id, document_id, chunk_index, content, start_offset, end_offset)
     VALUES (?, ?, ?, ?, ?, ?)
+"""
+# A chunk is pending while no embedding from the requested model exists
+# for it, which makes an interrupted run resumable and a model change
+# self-invalidating.
+_PENDING_SOURCE: Final[str] = """
+    FROM chunks c
+    JOIN documents d ON d.id = c.document_id
+    LEFT JOIN embeddings e ON e.chunk_id = c.chunk_id AND e.model = ?
+    WHERE e.chunk_id IS NULL
 """
 
 
@@ -122,10 +131,7 @@ class SqliteChunkRepository(ChunkRepository):
             f"{_SELECT_CHUNKS} WHERE d.source_path = ? ORDER BY c.chunk_index",
             (path_key(source_path),),
         )
-        if not rows:
-            return ()
-        metadata = to_document_metadata(rows[0])
-        return tuple(to_document_chunk(row, metadata) for row in rows)
+        return to_document_chunks(rows)
 
     def delete_for_document(self, source_path: Path) -> int:
         """Remove every chunk of a document.
@@ -146,6 +152,49 @@ class SqliteChunkRepository(ChunkRepository):
             """,
             (path_key(source_path),),
         )
+
+    def list_pending_embedding(self, model: str, limit: int) -> tuple[DocumentChunk, ...]:
+        """Read chunks that have no embedding from ``model`` yet.
+
+        Args:
+            model: Identifier of the embedding model.
+            limit: Maximum number of chunks to return.
+
+        Returns:
+            Chunks awaiting an embedding, grouped by document and in
+            reading order.
+
+        Raises:
+            StorageError: If the chunks cannot be read.
+            ValueError: If ``limit`` is not positive.
+        """
+        if limit <= 0:
+            raise ValueError("Limit must be greater than zero.")
+        rows = self._database.fetch_all(
+            f"""
+            SELECT {_CHUNK_COLUMNS}, {JOINED_DOCUMENT_COLUMNS}
+            {_PENDING_SOURCE}
+            ORDER BY c.document_id, c.chunk_index
+            LIMIT ?
+            """,
+            (model, limit),
+        )
+        return to_document_chunks(rows)
+
+    def count_pending_embedding(self, model: str) -> int:
+        """Count the chunks that have no embedding from ``model`` yet.
+
+        Args:
+            model: Identifier of the embedding model.
+
+        Returns:
+            The number of chunks awaiting an embedding.
+
+        Raises:
+            StorageError: If the chunks cannot be counted.
+        """
+        row = self._database.fetch_one(f"SELECT COUNT(*) AS total {_PENDING_SOURCE}", (model,))
+        return int(row["total"]) if row is not None else 0
 
     def count(self) -> int:
         """Return the number of stored chunks.

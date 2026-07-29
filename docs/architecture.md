@@ -56,9 +56,11 @@ Depends on the standard library and `core` only.
 Application-specific rules:
 
 - `use_cases/` - one class per business operation, orchestrating the domain.
+  `EmbedChunksUseCase` is the first of them.
 - `interfaces/` - ports for everything the use cases need from the outside
-  world (embedding provider, chat client, parsers).
-- `dto/` - flat data structures crossing the boundary to the UI.
+  world: `DocumentParser`, `TextChunker`, `EmbeddingProvider`.
+- `dto/` - flat data structures crossing the boundary to the UI, such as
+  `EmbeddingRun`.
 
 Depends on `domain` and `core`.
 
@@ -168,6 +170,48 @@ Embedding vectors are stored as little-endian 32-bit floats. Narrowing
 from Python's doubles turns an out-of-range value into infinity rather
 than failing, so the encoder checks its own result instead of trusting
 it.
+
+## Embedding
+
+Foundry Local serves an OpenAI-compatible API on the loopback
+interface, so `FoundryEmbeddingProvider` talks to it through the
+`openai` client instead of a bespoke HTTP layer. The service lifecycle
+stays with the user (`foundry service start`), which keeps the
+application free of process management and free of a dependency that
+only exists to provide it.
+
+`EmbedChunksUseCase` is the first use case in the project, and it lives
+in the application layer because it orchestrates several ports without
+knowing any of them concretely: it reads chunks, calls the provider and
+writes vectors.
+
+The run is **resumable by construction**. Pending work is not tracked in
+memory but derived from the knowledge base:
+
+```sql
+LEFT JOIN embeddings e ON e.chunk_id = c.chunk_id AND e.model = ?
+WHERE e.chunk_id IS NULL
+```
+
+Three properties fall out of that single predicate:
+
+- A batch that fails leaves everything already written in place, and a
+  later run continues from there. Failing fast is therefore safe, and no
+  partial-failure bookkeeping is needed.
+- Re-running on an unchanged index is a no-op.
+- Switching to another model marks every chunk pending again, so an
+  index never mixes vectors from two models.
+
+The last property only holds while providers stamp their own model name
+on what they return, so the use case verifies it: a provider that
+announced one model and returned another would otherwise loop forever.
+
+Batching happens twice, for two different reasons. The use case reads,
+embeds and writes `batch_size` chunks per step so that memory stays flat
+and progress is durable; the provider splits whatever it is given into
+requests of the same size, so that a direct caller cannot overwhelm the
+service. In the normal path the two coincide and each step is one
+request.
 
 ## Configuration
 

@@ -14,6 +14,7 @@ __all__ = [
     "DocumentNotFoundError",
     "DocumentParseError",
     "DocumentTooLargeError",
+    "EmbeddingError",
     "EmptyDocumentError",
     "StorageError",
     "UnsupportedFormatError",
@@ -54,4 +55,12 @@ class StorageError(DevMindError):
     Repository contracts are declared by the domain, so the failure mode
     they promise belongs here rather than to a specific database
     technology.
+    """
+
+
+class EmbeddingError(DevMindError):
+    """Raised when text cannot be turned into a vector.
+
+    Covers an unreachable or failing model service as well as a reply
+    that does not match the request.
     """

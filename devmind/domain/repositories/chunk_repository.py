@@ -78,6 +78,41 @@ class ChunkRepository(ABC):
         """
 
     @abstractmethod
+    def list_pending_embedding(self, model: str, limit: int) -> tuple[DocumentChunk, ...]:
+        """Read chunks that have no embedding from ``model`` yet.
+
+        Pending work is defined by the absence of an embedding, so a run
+        that stops halfway simply resumes where it left off, and
+        switching to another model marks every chunk pending again.
+
+        Args:
+            model: Identifier of the embedding model.
+            limit: Maximum number of chunks to return.
+
+        Returns:
+            Chunks awaiting an embedding, grouped by document and in
+            reading order.
+
+        Raises:
+            StorageError: If the chunks cannot be read.
+            ValueError: If ``limit`` is not positive.
+        """
+
+    @abstractmethod
+    def count_pending_embedding(self, model: str) -> int:
+        """Count the chunks that have no embedding from ``model`` yet.
+
+        Args:
+            model: Identifier of the embedding model.
+
+        Returns:
+            The number of chunks awaiting an embedding.
+
+        Raises:
+            StorageError: If the chunks cannot be counted.
+        """
+
+    @abstractmethod
     def count(self) -> int:
         """Return the number of stored chunks.
 

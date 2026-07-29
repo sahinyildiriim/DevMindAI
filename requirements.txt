@@ -4,8 +4,10 @@
 # Configuration
 python-dotenv>=1.2,<2.0
 
-# Local inference (Microsoft Foundry Local exposes an OpenAI-compatible API)
-foundry-local-sdk>=1.2,<2.0
+# Local inference. Foundry Local serves an OpenAI-compatible API on the
+# loopback interface, so the official client is all that is needed; the
+# foundry-local-sdk package only adds service lifecycle management, which
+# this application deliberately leaves to the user.
 openai>=2.50,<3.0
 
 # Document parsing

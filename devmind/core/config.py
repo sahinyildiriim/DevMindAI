@@ -220,6 +220,8 @@ class FoundryConfig:
     timeout_seconds: float = 120.0
     max_tokens: int = 1024
     temperature: float = 0.1
+    embedding_batch_size: int = 16
+    max_retries: int = 2
 
     def __post_init__(self) -> None:
         """Validate the endpoint URL and generation parameters."""
@@ -235,6 +237,11 @@ class FoundryConfig:
             0.0 <= self.temperature <= 2.0,
             "Foundry temperature must be between 0.0 and 2.0.",
         )
+        _require(
+            self.embedding_batch_size > 0,
+            "Foundry embedding batch size must be greater than zero.",
+        )
+        _require(self.max_retries >= 0, "Foundry max retries must not be negative.")
 
     @classmethod
     def from_env(cls) -> FoundryConfig:
@@ -247,6 +254,8 @@ class FoundryConfig:
             timeout_seconds=_read_env("DEVMIND_FOUNDRY_TIMEOUT_SECONDS", 120.0, float),
             max_tokens=_read_env("DEVMIND_FOUNDRY_MAX_TOKENS", 1024, int),
             temperature=_read_env("DEVMIND_FOUNDRY_TEMPERATURE", 0.1, float),
+            embedding_batch_size=_read_env("DEVMIND_FOUNDRY_EMBEDDING_BATCH_SIZE", 16, int),
+            max_retries=_read_env("DEVMIND_FOUNDRY_MAX_RETRIES", 2, int),
         )
 
 

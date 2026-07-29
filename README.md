@@ -160,8 +160,10 @@ mypy devmind
 | 1      | Document parsers and the common result model        | Done        |
 | 2      | Chunking engine with configurable size and overlap  | Done        |
 | 3      | SQLite persistence and repositories                 | Done        |
-| 4      | Retrieval and grounded answer generation            | Planned     |
-| 5      | Streamlit user interface                            | Planned     |
+| 4      | Foundry Local embeddings and the indexing run        | Done        |
+| 5      | Semantic search over the stored vectors             | Planned     |
+| 6      | Grounded answer generation                          | Planned     |
+| 7      | Streamlit user interface                            | Planned     |
 
 ## License
 

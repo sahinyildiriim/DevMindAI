@@ -7,6 +7,7 @@ is made in one place instead of in every query that reads it.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Final
@@ -24,6 +25,7 @@ __all__ = [
     "document_values",
     "path_key",
     "to_document_chunk",
+    "to_document_chunks",
     "to_document_metadata",
 ]
 
@@ -137,3 +139,31 @@ def to_document_chunk(row: sqlite3.Row, metadata: DocumentMetadata | None = None
         )
     except (ValueError, TypeError, DevMindError) as exc:
         raise StorageError(f"Stored chunk '{row['chunk_id']}' is corrupt: {exc}") from exc
+
+
+def to_document_chunks(rows: Iterable[sqlite3.Row]) -> tuple[DocumentChunk, ...]:
+    """Rebuild several chunks, sharing the metadata of each document.
+
+    Document metadata is immutable, so chunks of the same document can
+    safely point at one instance instead of rebuilding - and
+    revalidating - identical metadata per row.
+
+    Args:
+        rows: Rows exposing the chunk columns and the document columns.
+
+    Returns:
+        The reconstructed chunks, in row order.
+
+    Raises:
+        StorageError: If a row holds values the domain rejects.
+    """
+    seen: dict[str, DocumentMetadata] = {}
+    chunks: list[DocumentChunk] = []
+    for row in rows:
+        source_path = row["source_path"]
+        metadata = seen.get(source_path)
+        if metadata is None:
+            metadata = to_document_metadata(row)
+            seen[source_path] = metadata
+        chunks.append(to_document_chunk(row, metadata))
+    return tuple(chunks)

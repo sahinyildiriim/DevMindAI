@@ -12,8 +12,9 @@ from devmind.infrastructure.persistence import (
     SqliteChunkRepository,
     SqliteDatabase,
     SqliteDocumentRepository,
+    SqliteEmbeddingRepository,
 )
-from tests.factories import make_chunks, make_metadata
+from tests.factories import make_chunks, make_embedding, make_metadata
 
 CONTENTS = ("Routing matches requests.", "Middleware runs in order.", "Services are injected.")
 
@@ -155,3 +156,61 @@ def test_chunks_of_an_unknown_document_read_as_empty(
 ) -> None:
     assert repository.list_for_document(tmp_path / "absent.md") == ()
     assert repository.count() == 0
+
+
+# --------------------------------------------------------------------------- #
+# Pending embeddings
+# --------------------------------------------------------------------------- #
+def test_every_chunk_is_pending_before_anything_is_embedded(
+    repository: SqliteChunkRepository, stored_document: DocumentMetadata
+) -> None:
+    chunks = make_chunks(stored_document, CONTENTS)
+    repository.replace_for_document(stored_document.source_path, chunks)
+
+    assert repository.count_pending_embedding("all-minilm-l6-v2") == len(CONTENTS)
+    assert repository.list_pending_embedding("all-minilm-l6-v2", 10) == chunks
+
+
+def test_an_embedded_chunk_stops_being_pending(
+    repository: SqliteChunkRepository,
+    database: SqliteDatabase,
+    stored_document: DocumentMetadata,
+) -> None:
+    chunks = make_chunks(stored_document, CONTENTS)
+    repository.replace_for_document(stored_document.source_path, chunks)
+    SqliteEmbeddingRepository(database).save(chunks[0].chunk_id, make_embedding())
+
+    pending = repository.list_pending_embedding("all-minilm-l6-v2", 10)
+
+    assert repository.count_pending_embedding("all-minilm-l6-v2") == len(CONTENTS) - 1
+    assert chunks[0] not in pending
+
+
+def test_a_vector_from_another_model_leaves_the_chunk_pending(
+    repository: SqliteChunkRepository,
+    database: SqliteDatabase,
+    stored_document: DocumentMetadata,
+) -> None:
+    chunks = make_chunks(stored_document, CONTENTS)
+    repository.replace_for_document(stored_document.source_path, chunks)
+    SqliteEmbeddingRepository(database).save(
+        chunks[0].chunk_id, make_embedding(model="an-older-model")
+    )
+
+    assert repository.count_pending_embedding("all-minilm-l6-v2") == len(CONTENTS)
+
+
+def test_pending_chunks_respect_the_limit(
+    repository: SqliteChunkRepository, stored_document: DocumentMetadata
+) -> None:
+    repository.replace_for_document(
+        stored_document.source_path, make_chunks(stored_document, CONTENTS)
+    )
+
+    assert len(repository.list_pending_embedding("all-minilm-l6-v2", 2)) == 2
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_a_non_positive_limit_is_rejected(repository: SqliteChunkRepository, limit: int) -> None:
+    with pytest.raises(ValueError, match="Limit"):
+        repository.list_pending_embedding("all-minilm-l6-v2", limit)
