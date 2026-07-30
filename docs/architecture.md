@@ -47,7 +47,10 @@ Enterprise rules, expressed with plain Python objects:
   `Embedding`.
 - `repositories/` - abstract persistence contracts, one per table
   family, implemented by the infrastructure layer.
-- `exceptions.py` - document errors under `DocumentError`.
+- `similarity.py` - `cosine_similarity`, the pure ranking function
+  behind semantic search.
+- `exceptions.py` - document errors under `DocumentError`, plus
+  `StorageError` and `EmbeddingError`.
 
 Depends on the standard library and `core` only.
 
@@ -55,12 +58,12 @@ Depends on the standard library and `core` only.
 
 Application-specific rules:
 
-- `use_cases/` - one class per business operation, orchestrating the domain.
-  `EmbedChunksUseCase` is the first of them.
+- `use_cases/` - one class per business operation, orchestrating the domain:
+  `EmbedChunksUseCase`, `SearchChunksUseCase`.
 - `interfaces/` - ports for everything the use cases need from the outside
   world: `DocumentParser`, `TextChunker`, `EmbeddingProvider`.
-- `dto/` - flat data structures crossing the boundary to the UI, such as
-  `EmbeddingRun`.
+- `dto/` - flat data structures crossing the boundary to the UI:
+  `EmbeddingRun`, `SearchResult`.
 
 Depends on `domain` and `core`.
 
@@ -212,6 +215,35 @@ and progress is durable; the provider splits whatever it is given into
 requests of the same size, so that a direct caller cannot overwhelm the
 service. In the normal path the two coincide and each step is one
 request.
+
+## Semantic search
+
+`SearchChunksUseCase` ranks stored chunks against a query. There is no
+vector index library: `EmbeddingRepository.list_all(model)` reads every
+stored vector from the provider's own model, `cosine_similarity`
+(`devmind/domain/similarity.py`) scores each one against the query
+vector in plain Python, and `heapq.nlargest` picks the top matches. At
+the scale of a single curated documentation set this brute-force scan
+is fast enough, and it avoids a dependency whose only job would be to
+approximate a computation that is already exact and quick without it.
+
+Filtering by `min_score` happens *before* selecting the top matches, not
+after: taking the global top-K first and filtering second could throw
+away a result that would have qualified once a weaker one ahead of it
+was excluded. Filter-then-select always returns the best *qualifying*
+matches, up to the limit.
+
+`cosine_similarity` doubles as the confidence score exposed on
+`SearchResult`. Cosine similarity is mathematically defined on
+[-1, 1]; the function clamps it to [0, 1] so the value is always usable
+as a confidence measure - a negative direction carries no relevance
+signal and is treated the same as no similarity at all, and the upper
+bound absorbs floating point drift when a vector is compared to itself.
+
+Filtering by model means comparing against an index built with a
+different model naturally yields no results rather than a nonsensical
+score or a dimension-mismatch crash: `list_all` never mixes vectors
+from two models in the first place.
 
 ## Configuration
 

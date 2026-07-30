@@ -44,6 +44,22 @@ class EmbeddingRepository(ABC):
         """
 
     @abstractmethod
+    def list_all(self, model: str) -> tuple[tuple[ChunkId, Embedding], ...]:
+        """Read every stored embedding produced by ``model``.
+
+        Args:
+            model: Identifier of the embedding model.
+
+        Returns:
+            Every stored embedding from that model, keyed by chunk.
+            Vectors from another model are never mixed in, since
+            comparing them would be meaningless.
+
+        Raises:
+            StorageError: If the embeddings cannot be read.
+        """
+
+    @abstractmethod
     def get(self, chunk_id: ChunkId) -> Embedding | None:
         """Read the embedding of a chunk.
 

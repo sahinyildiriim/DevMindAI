@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Mapping
 from typing import Final
 
@@ -67,6 +68,25 @@ class SqliteEmbeddingRepository(EmbeddingRepository):
         )
         _logger.debug("Stored %d embeddings", written)
 
+    def list_all(self, model: str) -> tuple[tuple[ChunkId, Embedding], ...]:
+        """Read every stored embedding produced by ``model``.
+
+        Args:
+            model: Identifier of the embedding model.
+
+        Returns:
+            Every stored embedding from that model, keyed by chunk.
+
+        Raises:
+            StorageError: If the embeddings cannot be read or are
+                corrupt.
+        """
+        rows = self._database.fetch_all(
+            "SELECT chunk_id, model, dimensions, vector FROM embeddings WHERE model = ?",
+            (model,),
+        )
+        return tuple((ChunkId(row["chunk_id"]), self._decode(row["chunk_id"], row)) for row in rows)
+
     def get(self, chunk_id: ChunkId) -> Embedding | None:
         """Read the embedding of a chunk.
 
@@ -83,16 +103,7 @@ class SqliteEmbeddingRepository(EmbeddingRepository):
             "SELECT model, dimensions, vector FROM embeddings WHERE chunk_id = ?",
             (chunk_id.value,),
         )
-        if row is None:
-            return None
-
-        vector = decode_vector(row["vector"])
-        if len(vector) != row["dimensions"]:
-            raise StorageError(
-                f"Stored embedding of chunk '{chunk_id}' declares {row['dimensions']} "
-                f"dimensions but holds {len(vector)}."
-            )
-        return Embedding(model=row["model"], vector=vector)
+        return self._decode(chunk_id.value, row) if row is not None else None
 
     def delete(self, chunk_id: ChunkId) -> bool:
         """Remove the embedding of a chunk.
@@ -119,6 +130,30 @@ class SqliteEmbeddingRepository(EmbeddingRepository):
         """
         row = self._database.fetch_one("SELECT COUNT(*) AS total FROM embeddings")
         return int(row["total"]) if row is not None else 0
+
+    @staticmethod
+    def _decode(chunk_id_value: str, row: sqlite3.Row) -> Embedding:
+        """Rebuild an embedding from a row, checking its declared size.
+
+        Args:
+            chunk_id_value: Chunk identifier, used only in error
+                messages.
+            row: Row exposing ``model``, ``dimensions`` and ``vector``.
+
+        Returns:
+            The reconstructed embedding.
+
+        Raises:
+            StorageError: If the stored vector length disagrees with
+                the declared dimensions.
+        """
+        vector = decode_vector(row["vector"])
+        if len(vector) != row["dimensions"]:
+            raise StorageError(
+                f"Stored embedding of chunk '{chunk_id_value}' declares "
+                f"{row['dimensions']} dimensions but holds {len(vector)}."
+            )
+        return Embedding(model=row["model"], vector=vector)
 
 
 def _values(chunk_id: ChunkId, embedding: Embedding) -> tuple[object, ...]:

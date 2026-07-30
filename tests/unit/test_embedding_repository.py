@@ -136,3 +136,34 @@ def test_a_vector_that_lost_components_is_reported(
 
     with pytest.raises(StorageError, match="declares 99 dimensions"):
         repository.get(chunks[0].chunk_id)
+
+
+# --------------------------------------------------------------------------- #
+# Listing by model
+# --------------------------------------------------------------------------- #
+def test_list_all_returns_every_embedding_of_the_model(
+    repository: SqliteEmbeddingRepository, chunks: tuple[DocumentChunk, ...]
+) -> None:
+    repository.save(chunks[0].chunk_id, make_embedding(model="all-minilm-l6-v2"))
+    repository.save(chunks[1].chunk_id, make_embedding(model="all-minilm-l6-v2"))
+
+    listed = dict(repository.list_all("all-minilm-l6-v2"))
+
+    assert set(listed) == {chunks[0].chunk_id, chunks[1].chunk_id}
+
+
+def test_list_all_excludes_other_models(
+    repository: SqliteEmbeddingRepository, chunks: tuple[DocumentChunk, ...]
+) -> None:
+    repository.save(chunks[0].chunk_id, make_embedding(model="all-minilm-l6-v2"))
+    repository.save(chunks[1].chunk_id, make_embedding(model="an-older-model"))
+
+    listed = dict(repository.list_all("all-minilm-l6-v2"))
+
+    assert set(listed) == {chunks[0].chunk_id}
+
+
+def test_list_all_on_an_empty_index_returns_nothing(
+    repository: SqliteEmbeddingRepository,
+) -> None:
+    assert repository.list_all("all-minilm-l6-v2") == ()
