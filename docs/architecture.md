@@ -79,6 +79,9 @@ Adapters implementing the abstractions above:
 - `chunking/` - strategies that split documents for retrieval.
 - `embeddings/` - vector generation through Foundry Local.
 - `llm/` - chat completion through Foundry Local.
+- `chat_service.py` - `ChatService` and `build_chat_service`, the composition
+  root wiring the pieces above into the one call a future delivery mechanism
+  needs. See "Chat Service" below.
 
 ### `devmind/presentation`
 
@@ -279,6 +282,36 @@ model: `GeneratedAnswer.citations` is exactly the `SearchResult` tuple
 retrieval produced. Sourcing attribution from what was actually
 retrieved - rather than parsing it out of the model's prose - removes
 an entire class of hallucinated or malformed citations by construction.
+
+## Chat Service
+
+`AnswerQueryUseCase` already performs every step a chat interaction
+needs - take the question, call retrieval, build the prompt, call the
+model, return the answer and its citations - as plain, testable
+application logic with no concrete dependency on SQLite or Foundry
+Local. What it does not do, by design, is assemble itself: building one
+requires a `SqliteDatabase`, two repositories, an embedding provider and
+a chat provider, each configured from settings.
+
+`ChatService` (`infrastructure/chat_service.py`) is that assembly. It is
+a composition root, not a second use case: `ChatService.ask()` is a
+single delegation to `AnswerQueryUseCase.execute()`, plus one thing a
+pure use case deliberately leaves out - logging which sources, by
+title and confidence, the answer was grounded in, since that is exactly
+what a delivery mechanism (a UI, a CLI, an operator watching logs)
+wants to see and nothing a domain-level use case should need to care
+about. `build_chat_service()` reads `Settings` once and wires
+everything behind it; the returned service owns the knowledge base
+connection and must be closed with `ChatService.close()` once it is no
+longer needed.
+
+Placing a class that imports from every layer inside `infrastructure`
+looks, at first glance, like it breaks the dependency rule. It does
+not: the dependency rule constrains the *direction* dependencies point
+in ordinary business logic, and a composition root's entire job is to
+sit at the outermost ring and wire the layers beneath it together - the
+alternative would be scattering that wiring across every future caller
+instead of writing it once.
 
 ## Configuration
 

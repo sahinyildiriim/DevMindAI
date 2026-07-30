@@ -163,7 +163,8 @@ mypy devmind
 | 4      | Foundry Local embeddings and the indexing run        | Done        |
 | 5      | Semantic search over the stored vectors             | Done        |
 | 6      | Grounded answer generation via Foundry Local         | Done        |
-| 7      | Streamlit user interface                            | Planned     |
+| 7      | Chat Service: the wired, single-call entry point     | Done        |
+| 8      | Streamlit user interface                            | Planned     |
 
 ## License
 
