@@ -8,22 +8,28 @@ SQLite or Microsoft Foundry Local.
 
 Source code dependencies point **inwards** only.
 
-```
-┌──────────────────────────────────────────────┐
-│ presentation  (Streamlit UI)                 │
-│  ┌────────────────────────────────────────┐  │
-│  │ application  (use cases, ports, DTOs)  │  │
-│  │  ┌──────────────────────────────────┐  │  │
-│  │  │ domain  (entities, contracts)    │  │  │
-│  │  └──────────────────────────────────┘  │  │
-│  └────────────────────────────────────────┘  │
-│ infrastructure  (SQLite, parsers, Foundry)   │
-└──────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    P["presentation<br/><small>Streamlit pages</small>"]
+    A["application<br/><small>use cases · ports · DTOs</small>"]
+    D["domain<br/><small>entities · value objects · repository contracts</small>"]
+    I["infrastructure<br/><small>SQLite · parsers · chunking · Foundry Local</small>"]
+    Core["core<br/><small>config · logging · base exceptions</small>"]
+
+    P -->|depends on| A
+    A -->|depends on| D
+    I -.->|implements the ports and<br/>contracts declared by| A
+    I -.->|implements the ports and<br/>contracts declared by| D
+    D --> Core
+    A --> Core
+    I --> Core
+    P --> Core
 ```
 
 `infrastructure` sits on the outside: it *implements* the ports declared by
-`application` and the repository contracts declared by `domain`. Nothing inside
-imports it.
+`application` and the repository contracts declared by `domain` (dashed
+arrows above). Nothing inside imports it - `domain` and `application` have
+no idea SQLite or Foundry Local exist.
 
 ## Layers
 
@@ -345,6 +351,50 @@ sit at the outermost ring and wire the layers beneath it together - the
 alternative would be scattering that wiring across every future caller
 instead of writing it once.
 
+Asking a question, end to end:
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Chat page
+    participant CS as ChatService
+    participant AQ as AnswerQueryUseCase
+    participant SC as SearchChunksUseCase
+    participant EP as EmbeddingProvider<br/>(Foundry Local)
+    participant DB as SQLite
+    participant PB as PromptBuilder
+    participant CP as ChatProvider<br/>(Foundry Local)
+
+    User->>UI: Ask a question
+    UI->>CS: ask(question)
+    CS->>AQ: execute(question)
+    AQ->>SC: execute(question)
+    SC->>EP: embed([question])
+    EP-->>SC: query vector
+    SC->>DB: list_all(model)
+    DB-->>SC: stored vectors
+    Note over SC: cosine_similarity + heapq.nlargest
+    SC->>DB: get_many(top_k chunk ids)
+    DB-->>SC: chunk content
+    SC-->>AQ: ranked SearchResult(s)
+    alt no results
+        AQ-->>CS: fixed refusal, no citations<br/>(chat model never called)
+    else results found
+        AQ->>PB: build(question, results)
+        PB-->>AQ: Prompt
+        AQ->>CP: complete(prompt)
+        CP-->>AQ: answer text
+        AQ-->>CS: GeneratedAnswer + citations
+    end
+    CS-->>UI: GeneratedAnswer
+    UI-->>User: answer, confidence and sources
+```
+
+The `alt` branch above is the hard gate "Grounded answer generation"
+describes: it is a shape in the code (an early return), not a probability
+the model behaves - the chat model is not in the call graph at all on
+that path.
+
 ## Knowledge Base Service
 
 Uploading a document needs a step nothing before it provided: parsing,
@@ -356,6 +406,42 @@ so redoing the work would only reproduce the rows already there.
 Embedding stays a separate step, run once over the whole knowledge base
 by `EmbedChunksUseCase` after any number of documents have been indexed,
 rather than once per file.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Upload Documents page
+    participant KBS as KnowledgeBaseService
+    participant IDX as IndexDocumentUseCase
+    participant PR as DocumentParserRegistry
+    participant CH as TextChunker
+    participant Repo as Document / Chunk<br/>repositories
+    participant EC as EmbedChunksUseCase
+    participant EP as EmbeddingProvider<br/>(Foundry Local)
+
+    User->>UI: Upload file(s)
+    UI->>KBS: index_document(path)
+    KBS->>IDX: execute(path)
+    IDX->>PR: get_parser(path).parse(path)
+    PR-->>IDX: ParsedDocument (incl. checksum)
+    IDX->>Repo: get(path)
+    Repo-->>IDX: existing metadata, or none
+    alt checksum unchanged
+        IDX-->>KBS: skipped
+    else new or changed content
+        IDX->>Repo: save(metadata)
+        IDX->>CH: chunk(document)
+        CH-->>IDX: DocumentChunk(s)
+        IDX->>Repo: replace_for_document(path, chunks)
+        IDX-->>KBS: chunks indexed
+    end
+    UI->>KBS: embed_pending()
+    KBS->>EC: execute()
+    EC->>EP: embed(pending chunk texts)
+    EP-->>EC: vectors
+    EC-->>KBS: EmbeddingRun
+    KBS-->>UI: per-file results + embedding summary
+```
 
 `GetKnowledgeBaseStatsUseCase` reads the counts and embedding status the
 Knowledge Base page shows. Its one piece of logic - deciding whether the
