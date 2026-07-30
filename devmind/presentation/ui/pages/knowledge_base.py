@@ -7,6 +7,7 @@ import streamlit as st
 from devmind.application.dto import KnowledgeBaseStats
 from devmind.core.exceptions import DevMindError
 from devmind.domain.value_objects import DocumentMetadata
+from devmind.presentation.ui.errors import log_and_format
 from devmind.presentation.ui.services import get_knowledge_base_service
 
 __all__ = ["render"]
@@ -16,12 +17,12 @@ def render() -> None:
     """Render the Knowledge Base page."""
     st.title("📚 Knowledge Base")
 
-    service = get_knowledge_base_service()
     try:
+        service = get_knowledge_base_service()
         stats = service.get_stats()
         documents = service.list_documents()
     except DevMindError as exc:
-        st.error(f"Could not read the knowledge base: {exc}")
+        st.error(log_and_format("Reading the knowledge base", exc))
         return
 
     _render_stats(stats)

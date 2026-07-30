@@ -118,5 +118,4 @@ class SqliteDocumentRepository(DocumentRepository):
         Raises:
             StorageError: If the documents cannot be counted.
         """
-        row = self._database.fetch_one("SELECT COUNT(*) AS total FROM documents")
-        return int(row["total"]) if row is not None else 0
+        return self._database.count("SELECT COUNT(*) AS total FROM documents")

@@ -50,6 +50,26 @@ class ChunkRepository(ABC):
         """
 
     @abstractmethod
+    def get_many(self, chunk_ids: Sequence[ChunkId]) -> tuple[DocumentChunk, ...]:
+        """Read several chunks by identifier in a single round trip.
+
+        Meant for the small, fixed-size batch a ranked search result
+        represents, where looking each one up individually would spend
+        one query per result for no benefit.
+
+        Args:
+            chunk_ids: Identifiers to look up. Duplicates are read once.
+
+        Returns:
+            The chunks that still exist, in no particular order. An
+            identifier with no matching chunk is silently omitted rather
+            than treated as a failure.
+
+        Raises:
+            StorageError: If the chunks cannot be read.
+        """
+
+    @abstractmethod
     def list_for_document(self, source_path: Path) -> tuple[DocumentChunk, ...]:
         """Read every chunk of a document, in reading order.
 

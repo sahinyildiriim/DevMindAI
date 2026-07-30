@@ -135,6 +135,7 @@ def build_knowledge_base_service(settings: Settings | None = None) -> KnowledgeB
     database = build_database(resolved.database)
     documents = SqliteDocumentRepository(database)
     chunks = SqliteChunkRepository(database)
+    metadata = SqliteMetadataRepository(database)
     embedding_provider = build_embedding_provider(resolved.foundry)
 
     index_document = IndexDocumentUseCase(
@@ -146,14 +147,14 @@ def build_knowledge_base_service(settings: Settings | None = None) -> KnowledgeB
     embed_chunks = EmbedChunksUseCase(
         chunks=chunks,
         embeddings=SqliteEmbeddingRepository(database),
-        metadata=SqliteMetadataRepository(database),
+        metadata=metadata,
         provider=embedding_provider,
         batch_size=resolved.foundry.embedding_batch_size,
     )
     get_stats = GetKnowledgeBaseStatsUseCase(
         documents=documents,
         chunks=chunks,
-        metadata=SqliteMetadataRepository(database),
+        metadata=metadata,
         configured_embedding_model=embedding_provider.model,
     )
     return KnowledgeBaseService(

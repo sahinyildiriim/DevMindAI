@@ -166,6 +166,21 @@ ruff check .
 mypy devmind
 ```
 
+### Testing
+
+- `tests/unit/` - one class or function per test file, backed by a real
+  temporary SQLite file wherever persistence is involved. Only Foundry
+  Local's `openai` client is faked.
+- `tests/integration/` - several real components exercised together
+  through the actual `ChatService` and `KnowledgeBaseService`
+  composition roots: index a document, embed it, search for it and
+  answer a question about it, all against one real temporary knowledge
+  base. Foundry Local is replaced by the same two deterministic fakes
+  throughout, since no test environment can depend on a locally running
+  model service.
+
+Both run under the same `pytest` invocation; there is no separate command.
+
 ## Roadmap
 
 | Sprint | Scope                                              | Status      |
@@ -179,6 +194,7 @@ mypy devmind
 | 6      | Grounded answer generation via Foundry Local         | Done        |
 | 7      | Chat Service: the wired, single-call entry point     | Done        |
 | 8      | Streamlit user interface                            | Done        |
+| 9      | Test and refactoring pass                           | Done        |
 
 ## License
 

@@ -111,6 +111,29 @@ def test_fetch_one_returns_none_when_nothing_matches(database: SqliteDatabase) -
 
 
 # --------------------------------------------------------------------------- #
+# count()
+# --------------------------------------------------------------------------- #
+def test_count_reads_the_aggregate_column(database: SqliteDatabase) -> None:
+    database.execute("INSERT INTO metadata (key, value) VALUES ('a', '1')")
+    database.execute("INSERT INTO metadata (key, value) VALUES ('b', '2')")
+
+    assert database.count("SELECT COUNT(*) AS total FROM metadata") == 3  # +1 schema_version
+
+
+def test_count_applies_bound_parameters(database: SqliteDatabase) -> None:
+    database.execute("INSERT INTO metadata (key, value) VALUES ('a', 'x')")
+    database.execute("INSERT INTO metadata (key, value) VALUES ('b', 'y')")
+
+    total = database.count("SELECT COUNT(*) AS total FROM metadata WHERE value = ?", ("x",))
+
+    assert total == 1
+
+
+def test_count_on_an_empty_table_is_zero(database: SqliteDatabase) -> None:
+    assert database.count("SELECT COUNT(*) AS total FROM documents") == 0
+
+
+# --------------------------------------------------------------------------- #
 # Threading
 # --------------------------------------------------------------------------- #
 def test_each_thread_gets_its_own_connection(database: SqliteDatabase) -> None:

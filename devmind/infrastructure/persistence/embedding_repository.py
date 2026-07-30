@@ -128,8 +128,7 @@ class SqliteEmbeddingRepository(EmbeddingRepository):
         Raises:
             StorageError: If the embeddings cannot be counted.
         """
-        row = self._database.fetch_one("SELECT COUNT(*) AS total FROM embeddings")
-        return int(row["total"]) if row is not None else 0
+        return self._database.count("SELECT COUNT(*) AS total FROM embeddings")
 
     @staticmethod
     def _decode(chunk_id_value: str, row: sqlite3.Row) -> Embedding:

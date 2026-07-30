@@ -7,8 +7,6 @@ rather than through a bespoke HTTP layer. Nothing leaves the machine.
 
 from __future__ import annotations
 
-from typing import Final
-
 import openai
 from openai import OpenAI
 
@@ -17,15 +15,11 @@ from devmind.application.interfaces.chat_provider import ChatProvider
 from devmind.core.config import FoundryConfig, get_settings
 from devmind.core.logger import get_logger
 from devmind.domain.exceptions import GenerationError
+from devmind.infrastructure.foundry_client import translate_openai_error
 
 __all__ = ["FoundryChatProvider", "build_chat_provider"]
 
 _logger = get_logger(__name__)
-
-_START_SERVICE_HINT: Final[str] = (
-    "Make sure Foundry Local is running: 'foundry service start', then check "
-    "the endpoint with 'foundry service status'."
-)
 
 
 class FoundryChatProvider(ChatProvider):
@@ -84,13 +78,13 @@ class FoundryChatProvider(ChatProvider):
                 max_tokens=self._max_tokens,
                 temperature=self._temperature,
             )
-        except openai.APIConnectionError as exc:
-            raise GenerationError(
-                f"Cannot reach the chat model at '{self._client.base_url}'. {_START_SERVICE_HINT}"
-            ) from exc
         except openai.OpenAIError as exc:
-            raise GenerationError(
-                f"Chat request to model '{self._model}' failed: {type(exc).__name__}: {exc}"
+            raise translate_openai_error(
+                exc,
+                error_type=GenerationError,
+                kind="chat",
+                model=self._model,
+                base_url=str(self._client.base_url),
             ) from exc
 
         return self._extract_text(response)

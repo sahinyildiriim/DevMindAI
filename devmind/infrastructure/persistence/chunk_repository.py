@@ -115,6 +115,28 @@ class SqliteChunkRepository(ChunkRepository):
         row = self._database.fetch_one(f"{_SELECT_CHUNKS} WHERE c.chunk_id = ?", (chunk_id.value,))
         return to_document_chunk(row) if row is not None else None
 
+    def get_many(self, chunk_ids: Sequence[ChunkId]) -> tuple[DocumentChunk, ...]:
+        """Read several chunks by identifier in a single round trip.
+
+        Args:
+            chunk_ids: Identifiers to look up. Duplicates are read once.
+
+        Returns:
+            The chunks that still exist, in no particular order.
+
+        Raises:
+            StorageError: If the chunks cannot be read.
+        """
+        if not chunk_ids:
+            return ()
+        unique_ids = {chunk_id.value for chunk_id in chunk_ids}
+        placeholders = ", ".join("?" * len(unique_ids))
+        rows = self._database.fetch_all(
+            f"{_SELECT_CHUNKS} WHERE c.chunk_id IN ({placeholders})",
+            tuple(unique_ids),
+        )
+        return to_document_chunks(rows)
+
     def list_for_document(self, source_path: Path) -> tuple[DocumentChunk, ...]:
         """Read every chunk of a document, in reading order.
 
@@ -193,8 +215,7 @@ class SqliteChunkRepository(ChunkRepository):
         Raises:
             StorageError: If the chunks cannot be counted.
         """
-        row = self._database.fetch_one(f"SELECT COUNT(*) AS total {_PENDING_SOURCE}", (model,))
-        return int(row["total"]) if row is not None else 0
+        return self._database.count(f"SELECT COUNT(*) AS total {_PENDING_SOURCE}", (model,))
 
     def count(self) -> int:
         """Return the number of stored chunks.
@@ -202,8 +223,7 @@ class SqliteChunkRepository(ChunkRepository):
         Raises:
             StorageError: If the chunks cannot be counted.
         """
-        row = self._database.fetch_one("SELECT COUNT(*) AS total FROM chunks")
-        return int(row["total"]) if row is not None else 0
+        return self._database.count("SELECT COUNT(*) AS total FROM chunks")
 
     @staticmethod
     def _assert_chunks_belong_to(key: str, chunks: Sequence[DocumentChunk]) -> None:

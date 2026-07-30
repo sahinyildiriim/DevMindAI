@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 from time import perf_counter
-from typing import Final
 
 import openai
 from openai import OpenAI
@@ -20,15 +19,11 @@ from devmind.core.exceptions import DevMindError
 from devmind.core.logger import get_logger
 from devmind.domain.exceptions import EmbeddingError
 from devmind.domain.value_objects.embedding import Embedding
+from devmind.infrastructure.foundry_client import translate_openai_error
 
 __all__ = ["FoundryEmbeddingProvider", "build_embedding_provider"]
 
 _logger = get_logger(__name__)
-
-_START_SERVICE_HINT: Final[str] = (
-    "Make sure Foundry Local is running: 'foundry service start', then check "
-    "the endpoint with 'foundry service status'."
-)
 
 
 class FoundryEmbeddingProvider(EmbeddingProvider):
@@ -100,14 +95,13 @@ class FoundryEmbeddingProvider(EmbeddingProvider):
         started_at = perf_counter()
         try:
             response = self._client.embeddings.create(model=self._model, input=list(batch))
-        except openai.APIConnectionError as exc:
-            raise EmbeddingError(
-                f"Cannot reach the embedding model at '{self._client.base_url}'. "
-                f"{_START_SERVICE_HINT}"
-            ) from exc
         except openai.OpenAIError as exc:
-            raise EmbeddingError(
-                f"Embedding request to model '{self._model}' failed: {type(exc).__name__}: {exc}"
+            raise translate_openai_error(
+                exc,
+                error_type=EmbeddingError,
+                kind="embedding",
+                model=self._model,
+                base_url=str(self._client.base_url),
             ) from exc
 
         # The API is free to reply out of order, so entries are placed

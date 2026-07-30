@@ -81,6 +81,10 @@ Adapters implementing the abstractions above:
 - `chunking/` - strategies that split documents for retrieval.
 - `embeddings/` - vector generation through Foundry Local.
 - `llm/` - chat completion through Foundry Local.
+- `foundry_client.py` - `translate_openai_error`, the one place an `openai`
+  client failure becomes a domain exception, shared by `embeddings/` and
+  `llm/` so the two adapters cannot drift into two different wordings for
+  the same "Foundry Local is not running" failure.
 - `chat_service.py` - `ChatService` and `build_chat_service`, the composition
   root wiring the pieces above into the one call a delivery mechanism needs
   to ask a question. See "Chat Service" below.
@@ -196,6 +200,12 @@ from Python's doubles turns an out-of-range value into infinity rather
 than failing, so the encoder checks its own result instead of trusting
 it.
 
+Every repository's `count()` (and `ChunkRepository.count_pending_embedding()`)
+runs through one shared `SqliteDatabase.count()`, rather than each
+repeating `int(row["total"])`. `ChunkRepository.get_many()` reads a batch
+of chunks by identifier in one query; `SearchChunksUseCase` is the reason
+it exists; see "Semantic search" below.
+
 ## Embedding
 
 Foundry Local serves an OpenAI-compatible API on the loopback
@@ -266,6 +276,12 @@ Filtering by model means comparing against an index built with a
 different model naturally yields no results rather than a nonsensical
 score or a dimension-mismatch crash: `list_all` never mixes vectors
 from two models in the first place.
+
+Once the top matches are chosen, their content is fetched with one call
+to `ChunkRepository.get_many()` rather than one `get()` per result. The
+brute-force scan above is still O(chunks in the knowledge base) - no
+query shape changes that - but reading back the handful of winners is
+not something later added to that cost.
 
 ## Grounded answer generation
 
@@ -382,17 +398,60 @@ collect input, call one of the two services, and render the DTO that
 comes back. The one piece of local state is the Chat page's turn
 history in `st.session_state` - purely a transcript of what was shown,
 not conversational memory fed back into retrieval, since
-`AnswerQueryUseCase` answers each question independently. Every call
-into a service is wrapped in `except (DevMindError, ValueError)`: the
-exceptions raised from Sprint 4 onward already carry actionable text
-(an unreachable Foundry Local error includes the `foundry service start`
-hint), so the UI's error handling is rendering that text with `st.error`,
-not writing new messages.
+`AnswerQueryUseCase` answers each question independently.
+
+Every call into a service is guarded by a page-appropriate catch -
+`DevMindError` everywhere, `ValueError` too on the Chat page for a blank
+question, and `OSError` too on the Upload Documents page, since saving
+the upload to disk before parsing it is I/O the domain layer never
+touches. The exceptions raised from Sprint 4 onward already carry
+actionable text (an unreachable Foundry Local error includes the
+`foundry service start` hint), so a page's job is only to log and
+display that text, never to write new wording - `ui/errors.py`'s
+`log_and_format()` does both in the one place every page shares, which
+is also what turned a silent gap into a visible one: before it existed,
+a failure a page caught and showed to the user left no trace in
+`logs/devmind.log` at all.
 
 Uploaded files are saved by name only - `Path(uploaded_file.name).name`
 strips any directory component the browser might send - into the
 configured documents directory, so an upload can never write outside
 it.
+
+## Testing strategy
+
+`tests/unit/` targets one class or function at a time. Persistence is
+still real wherever a repository is involved - a temporary SQLite file,
+never a mock of `SqliteDatabase` - because the SQL itself, and how
+`sqlite3.Row` maps back to a domain object, is exactly the kind of thing
+a mock would stop testing. The only things ever faked are the two
+Foundry Local adapters (`EmbeddingProvider`, `ChatProvider`), since no
+test environment can depend on a model service actually running.
+
+`tests/integration/` (`tests/integration/factories.py`) goes one step
+further: rather than one class, it wires the *same two composition
+roots* production uses - `ChatService` and `KnowledgeBaseService` - and
+drives them through `index_document()` → `embed_pending()` → `ask()`
+against one real temporary knowledge base file. Two things this checks
+that no unit test can:
+
+- That a document indexed through `KnowledgeBaseService`'s connection is
+  actually found through `ChatService`'s *separate* connection to the
+  same file - the two-independent-connections design "Knowledge Base
+  Service" describes above is a claim about SQLite's write-ahead log,
+  and only a test that truly opens two connections can hold it to account.
+- That ranking is not just plumbing. The fake embedding provider
+  (`TopicEmbeddingProvider`) is a small bag-of-words vector over a fixed
+  vocabulary - not a real model, but not arbitrary either: two texts
+  that share more of those words score higher by cosine similarity, the
+  same way a real embedding model would separate them. A test that asks
+  about dependency injection and asserts the *dependency injection
+  document* comes back, from among three real candidates, is verifying
+  actual behaviour, not merely that no exception was raised.
+
+Both suites run under the same `pytest` invocation - `tests/integration/`
+is a directory, not a marker, kept that way deliberately since a second
+test command would be one more thing to remember to run.
 
 ## Configuration
 

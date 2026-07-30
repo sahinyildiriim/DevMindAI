@@ -27,6 +27,16 @@ class IndexDocumentUseCase:
     :class:`~devmind.application.use_cases.embed_chunks.EmbedChunksUseCase`
     over the whole knowledge base rather than one document at a time,
     so several newly indexed documents are embedded together in one run.
+
+    Known limitation: saving the document and replacing its chunks are
+    two separate writes, each atomic on its own but not atomic together.
+    A failure between them - possible only from a genuine storage fault,
+    since the document is guaranteed to exist by the time chunks are
+    replaced - would leave the stored metadata ahead of its chunks. A
+    later successful re-index of the same file corrects it. Closing that
+    window for good would need the repositories to share one
+    transaction across the two calls, which is more machinery than this
+    failure mode's low likelihood currently justifies.
     """
 
     def __init__(

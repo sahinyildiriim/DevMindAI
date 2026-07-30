@@ -117,3 +117,49 @@ def test_settings_page_shows_the_configured_models() -> None:
     metrics = {metric.label: metric.value for metric in at.metric}
     assert metrics["Chat model"] == "phi-3.5-mini"
     assert metrics["Embedding model"] == "all-minilm-l6-v2"
+
+
+# --------------------------------------------------------------------------- #
+# Uploading a real file, against the real (unreachable) Foundry Local
+# --------------------------------------------------------------------------- #
+# A connection attempt against an absent Foundry Local retries with
+# backoff before the openai client gives up, comfortably longer than
+# AppTest's 3-second default; these two tests raise it accordingly.
+_UPLOAD_TIMEOUT_SECONDS = 25
+
+
+def test_uploading_a_document_indexes_it_and_reports_the_embedding_failure() -> None:
+    at = AppTest.from_string(
+        "from devmind.presentation.ui.pages import upload_documents\nupload_documents.render()",
+        default_timeout=_UPLOAD_TIMEOUT_SECONDS,
+    ).run()
+    at.file_uploader[0].upload(
+        "routing.md", b"# Routing\n\nEndpoint routing matches incoming requests.\n", "text/markdown"
+    )
+    at.run()
+
+    at.button[0].click().run()
+
+    assert not at.exception
+    messages = [element.value for element in at.markdown]
+    assert any("routing.md" in message and "1 chunk" in message for message in messages)
+    # Foundry Local is not running in this environment: the failure must
+    # be reported in the status container, not raised.
+    assert any("Cannot reach the embedding model" in message for message in messages)
+
+
+def test_an_os_rejected_file_name_is_reported_without_crashing_the_page() -> None:
+    at = AppTest.from_string(
+        "from devmind.presentation.ui.pages import upload_documents\nupload_documents.render()",
+        default_timeout=_UPLOAD_TIMEOUT_SECONDS,
+    ).run()
+    # "<" and ">" are reserved characters no Windows file name may
+    # contain, so writing the upload to disk raises OSError.
+    at.file_uploader[0].upload("report<1>.md", b"content", "text/markdown")
+    at.run()
+
+    at.button[0].click().run()
+
+    assert not at.exception
+    messages = [element.value for element in at.markdown]
+    assert any("report<1>.md" in message for message in messages)

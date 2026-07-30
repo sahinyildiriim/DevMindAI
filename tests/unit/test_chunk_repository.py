@@ -159,6 +159,72 @@ def test_chunks_of_an_unknown_document_read_as_empty(
 
 
 # --------------------------------------------------------------------------- #
+# get_many()
+# --------------------------------------------------------------------------- #
+def test_get_many_reads_every_requested_chunk(
+    repository: SqliteChunkRepository, stored_document: DocumentMetadata
+) -> None:
+    chunks = make_chunks(stored_document, CONTENTS)
+    repository.replace_for_document(stored_document.source_path, chunks)
+
+    found = repository.get_many([chunks[0].chunk_id, chunks[2].chunk_id])
+
+    assert {chunk.chunk_id for chunk in found} == {chunks[0].chunk_id, chunks[2].chunk_id}
+
+
+def test_get_many_shares_metadata_across_documents(
+    repository: SqliteChunkRepository, documents: SqliteDocumentRepository, tmp_path: Path
+) -> None:
+    first_document = make_metadata(source_path=tmp_path / "first.md", title="First")
+    second_document = make_metadata(
+        source_path=tmp_path / "second.md", title="Second", checksum="b" * 64
+    )
+    documents.save(first_document)
+    documents.save(second_document)
+    first_chunks = make_chunks(first_document, ["From the first document."])
+    second_chunks = make_chunks(second_document, ["From the second document."])
+    repository.replace_for_document(first_document.source_path, first_chunks)
+    repository.replace_for_document(second_document.source_path, second_chunks)
+
+    found = {
+        chunk.chunk_id: chunk
+        for chunk in repository.get_many([first_chunks[0].chunk_id, second_chunks[0].chunk_id])
+    }
+
+    assert found[first_chunks[0].chunk_id].metadata.title == "First"
+    assert found[second_chunks[0].chunk_id].metadata.title == "Second"
+
+
+def test_get_many_omits_unknown_identifiers(
+    repository: SqliteChunkRepository, stored_document: DocumentMetadata
+) -> None:
+    chunks = make_chunks(stored_document, CONTENTS)
+    repository.replace_for_document(stored_document.source_path, chunks)
+    unknown = ChunkId.for_document("f" * 64, 0)
+
+    found = repository.get_many([chunks[0].chunk_id, unknown])
+
+    assert {chunk.chunk_id for chunk in found} == {chunks[0].chunk_id}
+
+
+def test_get_many_deduplicates_repeated_identifiers(
+    repository: SqliteChunkRepository, stored_document: DocumentMetadata
+) -> None:
+    chunks = make_chunks(stored_document, CONTENTS)
+    repository.replace_for_document(stored_document.source_path, chunks)
+
+    found = repository.get_many([chunks[0].chunk_id, chunks[0].chunk_id])
+
+    assert len(found) == 1
+
+
+def test_get_many_with_no_identifiers_makes_no_query(
+    repository: SqliteChunkRepository,
+) -> None:
+    assert repository.get_many([]) == ()
+
+
+# --------------------------------------------------------------------------- #
 # Pending embeddings
 # --------------------------------------------------------------------------- #
 def test_every_chunk_is_pending_before_anything_is_embedded(

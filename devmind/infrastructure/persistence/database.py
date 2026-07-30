@@ -221,6 +221,27 @@ class SqliteDatabase:
         except sqlite3.Error as exc:
             raise StorageError(f"Query failed: {exc}") from exc
 
+    def count(self, sql: str, parameters: _Parameters = ()) -> int:
+        """Run a ``SELECT COUNT(*) AS total ...`` query and return the count.
+
+        Every repository that reports a size funnels through this one
+        method, rather than each repeating ``int(row["total"])``.
+
+        Args:
+            sql: Query selecting a single column aliased ``total``.
+            parameters: Values bound to the placeholders.
+
+        Returns:
+            The count. A bare aggregate query always yields exactly one
+            row, but a fallback to 0 is kept rather than trusted as an
+            invariant, since nothing here enforces what ``sql`` contains.
+
+        Raises:
+            StorageError: If the query fails.
+        """
+        row = self.fetch_one(sql, parameters)
+        return int(row["total"]) if row is not None else 0
+
     def _open(self) -> sqlite3.Connection:
         """Open and configure a connection for the calling thread.
 

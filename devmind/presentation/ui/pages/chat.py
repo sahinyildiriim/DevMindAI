@@ -6,6 +6,7 @@ import streamlit as st
 
 from devmind.application.dto import GeneratedAnswer
 from devmind.core.exceptions import DevMindError
+from devmind.presentation.ui.errors import log_and_format
 from devmind.presentation.ui.services import get_chat_service
 
 __all__ = ["render"]
@@ -48,7 +49,7 @@ def _ask(question: str) -> tuple[GeneratedAnswer | None, str | None]:
         with st.spinner("Thinking..."):
             return get_chat_service().ask(question), None
     except (DevMindError, ValueError) as exc:
-        return None, str(exc)
+        return None, log_and_format("Answering a chat question", exc)
 
 
 def _render_turn(question: str, answer: GeneratedAnswer | None, error: str | None) -> None:

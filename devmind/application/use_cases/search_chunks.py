@@ -109,6 +109,11 @@ class SearchChunksUseCase:
     def _to_results(self, ranked: list[tuple[ChunkId, float]]) -> tuple[SearchResult, ...]:
         """Attach chunk content to ranked identifiers.
 
+        The chunks are fetched in one round trip rather than one query
+        per result: `top_k` is small, but a chat request already pays
+        for one query to list embedding candidates and one to embed the
+        query, and there is no reason to add a query per result on top.
+
         A chunk absent by the time it is looked up - removed between the
         embedding scan and this step - is skipped rather than treated as
         a failure: a single stale reference should not sink an entire
@@ -118,11 +123,17 @@ class SearchChunksUseCase:
             ranked: Chunk identifiers and their score, best first.
 
         Returns:
-            The matches whose chunk could still be read.
+            The matches whose chunk could still be read, in the given,
+            best-first order.
         """
+        chunks_by_id = {
+            chunk.chunk_id: chunk
+            for chunk in self._chunks.get_many([chunk_id for chunk_id, _ in ranked])
+        }
+
         results: list[SearchResult] = []
         for chunk_id, score in ranked:
-            chunk = self._chunks.get(chunk_id)
+            chunk = chunks_by_id.get(chunk_id)
             if chunk is None:
                 _logger.warning(
                     "Chunk '%s' was removed while ranking search results; skipping it", chunk_id

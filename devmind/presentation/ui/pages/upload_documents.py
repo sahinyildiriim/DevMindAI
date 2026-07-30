@@ -10,6 +10,7 @@ from streamlit.runtime.uploaded_file_manager import UploadedFile
 from devmind.core.config import get_settings
 from devmind.core.exceptions import DevMindError
 from devmind.domain.value_objects import DocumentFormat
+from devmind.presentation.ui.errors import log_and_format
 from devmind.presentation.ui.services import get_knowledge_base_service
 
 __all__ = ["render"]
@@ -42,7 +43,12 @@ def _index_uploaded_files(uploaded_files: list[UploadedFile]) -> None:
     Args:
         uploaded_files: Files selected in the uploader widget.
     """
-    service = get_knowledge_base_service()
+    try:
+        service = get_knowledge_base_service()
+    except DevMindError as exc:
+        st.error(log_and_format("Reaching the knowledge base", exc))
+        return
+
     destination = get_settings().documents.source_directory
     destination.mkdir(parents=True, exist_ok=True)
 
@@ -56,8 +62,11 @@ def _index_uploaded_files(uploaded_files: list[UploadedFile]) -> None:
             try:
                 target.write_bytes(uploaded_file.getvalue())
                 result = service.index_document(target)
-            except DevMindError as exc:
-                status.write(f":x: **{uploaded_file.name}**: {exc}")
+            except (DevMindError, OSError) as exc:
+                status.write(
+                    f":x: **{uploaded_file.name}**: "
+                    f"{log_and_format(f'Indexing {uploaded_file.name}', exc)}"
+                )
                 continue
 
             if result.was_skipped:
@@ -75,7 +84,7 @@ def _index_uploaded_files(uploaded_files: list[UploadedFile]) -> None:
             try:
                 run = service.embed_pending()
             except DevMindError as exc:
-                status.write(f":x: Embedding failed: {exc}")
+                status.write(f":x: {log_and_format('Embedding pending chunks', exc)}")
             else:
                 status.write(f"Embedded {run.embedded} chunk(s) in {run.batches} batch(es).")
 
