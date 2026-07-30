@@ -59,11 +59,14 @@ Depends on the standard library and `core` only.
 Application-specific rules:
 
 - `use_cases/` - one class per business operation, orchestrating the domain:
-  `EmbedChunksUseCase`, `SearchChunksUseCase`.
+  `EmbedChunksUseCase`, `SearchChunksUseCase`, `AnswerQueryUseCase`.
 - `interfaces/` - ports for everything the use cases need from the outside
-  world: `DocumentParser`, `TextChunker`, `EmbeddingProvider`.
+  world: `DocumentParser`, `TextChunker`, `EmbeddingProvider`, `ChatProvider`.
 - `dto/` - flat data structures crossing the boundary to the UI:
-  `EmbeddingRun`, `SearchResult`.
+  `EmbeddingRun`, `SearchResult`, `Prompt`, `GeneratedAnswer`.
+- `prompt_builder.py` - `PromptBuilder`, composing the grounded prompt from
+  a query and its retrieved chunks. A plain class rather than a port: unlike
+  the adapters above it, it has no external dependency to swap out.
 
 Depends on `domain` and `core`.
 
@@ -244,6 +247,38 @@ Filtering by model means comparing against an index built with a
 different model naturally yields no results rather than a nonsensical
 score or a dimension-mismatch crash: `list_all` never mixes vectors
 from two models in the first place.
+
+## Grounded answer generation
+
+`AnswerQueryUseCase` is the last step of the pipeline: it turns a
+`SearchChunksUseCase` result into an answer, through the same
+Foundry-Local-via-`openai`-client pattern used for embeddings
+(`FoundryChatProvider`, `infrastructure/llm`).
+
+Hallucination prevention is layered, because a prompt alone cannot
+*guarantee* a model's behaviour:
+
+1. **Retrieval as a hard gate.** When `SearchChunksUseCase` finds no
+   context at all, `AnswerQueryUseCase` returns the fixed sentence
+   directly and never calls the chat model. This is the strong
+   guarantee: it does not depend on the model choosing to cooperate.
+2. **The system prompt as a soft gate.** `PromptBuilder`
+   (`application/prompt_builder.py`) instructs the model to answer only
+   from the numbered excerpts it is given and to reply with that exact
+   same sentence if the excerpts turn out not to answer the question.
+   This covers the case retrieval cannot detect on its own: chunks that
+   cleared the similarity threshold but do not actually contain the
+   answer.
+
+The two paths share one constant, `NO_CONTEXT_ANSWER`, so the wording
+can never drift between what code returns and what the model is told
+to say.
+
+Citations are attached by `AnswerQueryUseCase`, never asked of the
+model: `GeneratedAnswer.citations` is exactly the `SearchResult` tuple
+retrieval produced. Sourcing attribution from what was actually
+retrieved - rather than parsing it out of the model's prose - removes
+an entire class of hallucinated or malformed citations by construction.
 
 ## Configuration
 

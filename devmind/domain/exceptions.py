@@ -16,6 +16,7 @@ __all__ = [
     "DocumentTooLargeError",
     "EmbeddingError",
     "EmptyDocumentError",
+    "GenerationError",
     "StorageError",
     "UnsupportedFormatError",
 ]
@@ -63,4 +64,12 @@ class EmbeddingError(DevMindError):
 
     Covers an unreachable or failing model service as well as a reply
     that does not match the request.
+    """
+
+
+class GenerationError(DevMindError):
+    """Raised when a grounded answer cannot be produced.
+
+    Covers an unreachable or failing chat model service as well as a
+    reply that carries no usable text.
     """
