@@ -50,7 +50,7 @@ Enterprise rules, expressed with plain Python objects:
 - `similarity.py` - `cosine_similarity`, the pure ranking function
   behind semantic search.
 - `exceptions.py` - document errors under `DocumentError`, plus
-  `StorageError` and `EmbeddingError`.
+  `StorageError`, `EmbeddingError` and `GenerationError`.
 
 Depends on the standard library and `core` only.
 
@@ -59,11 +59,13 @@ Depends on the standard library and `core` only.
 Application-specific rules:
 
 - `use_cases/` - one class per business operation, orchestrating the domain:
-  `EmbedChunksUseCase`, `SearchChunksUseCase`, `AnswerQueryUseCase`.
+  `IndexDocumentUseCase`, `EmbedChunksUseCase`, `GetKnowledgeBaseStatsUseCase`,
+  `SearchChunksUseCase`, `AnswerQueryUseCase`.
 - `interfaces/` - ports for everything the use cases need from the outside
   world: `DocumentParser`, `TextChunker`, `EmbeddingProvider`, `ChatProvider`.
 - `dto/` - flat data structures crossing the boundary to the UI:
-  `EmbeddingRun`, `SearchResult`, `Prompt`, `GeneratedAnswer`.
+  `IndexingResult`, `KnowledgeBaseStats`, `EmbeddingRun`, `SearchResult`,
+  `Prompt`, `GeneratedAnswer`.
 - `prompt_builder.py` - `PromptBuilder`, composing the grounded prompt from
   a query and its retrieved chunks. A plain class rather than a port: unlike
   the adapters above it, it has no external dependency to swap out.
@@ -80,13 +82,27 @@ Adapters implementing the abstractions above:
 - `embeddings/` - vector generation through Foundry Local.
 - `llm/` - chat completion through Foundry Local.
 - `chat_service.py` - `ChatService` and `build_chat_service`, the composition
-  root wiring the pieces above into the one call a future delivery mechanism
-  needs. See "Chat Service" below.
+  root wiring the pieces above into the one call a delivery mechanism needs
+  to ask a question. See "Chat Service" below.
+- `knowledge_base_service.py` - `KnowledgeBaseService` and
+  `build_knowledge_base_service`, the composition root for indexing documents
+  and reading the knowledge base's counts and embedding status. See
+  "Knowledge Base Service" below.
 
 ### `devmind/presentation`
 
-The delivery mechanism: Streamlit pages and components. It calls use cases and
-renders DTOs; it contains no business logic.
+The delivery mechanism: a Streamlit application. It calls use cases (through
+the two composition roots above) and renders DTOs; it contains no business
+logic of its own.
+
+- `ui/app.py` - `run()`, assembling the four pages into `st.navigation`.
+  `app.py` at the project root is the thin script Streamlit actually executes
+  (`streamlit run app.py`); it only calls this function.
+- `ui/services.py` - `get_chat_service()` / `get_knowledge_base_service()`,
+  wrapping the infrastructure factories in `st.cache_resource` so each is
+  built once per server process rather than on every rerun.
+- `ui/pages/` - one module per page (`chat`, `upload_documents`,
+  `knowledge_base`, `settings`), each exposing a single `render()` function.
 
 ## Document parsing
 
@@ -312,6 +328,71 @@ in ordinary business logic, and a composition root's entire job is to
 sit at the outermost ring and wire the layers beneath it together - the
 alternative would be scattering that wiring across every future caller
 instead of writing it once.
+
+## Knowledge Base Service
+
+Uploading a document needs a step nothing before it provided: parsing,
+chunking and storing a file is one operation, and no use case performed
+it end to end. `IndexDocumentUseCase` (`application/use_cases`) is that
+operation. Re-indexing a document whose checksum has not changed skips
+chunking and storage entirely - `ChunkId` is derived from the checksum,
+so redoing the work would only reproduce the rows already there.
+Embedding stays a separate step, run once over the whole knowledge base
+by `EmbedChunksUseCase` after any number of documents have been indexed,
+rather than once per file.
+
+`GetKnowledgeBaseStatsUseCase` reads the counts and embedding status the
+Knowledge Base page shows. Its one piece of logic - deciding whether the
+stored embeddings match the currently configured model - reads
+`pending_embedding_count` from `ChunkRepository.count_pending_embedding`,
+the same predicate `EmbedChunksUseCase` itself uses to find pending
+work, rather than approximating it from a separate, looser count. When
+nothing has been embedded yet, the model is reported as current: there
+is no stale model to warn about, only work still to be done.
+
+`KnowledgeBaseService` (`infrastructure/knowledge_base_service.py`) is
+the composition root for these two use cases plus `EmbedChunksUseCase`,
+mirroring `ChatService`. It opens its own `SqliteDatabase` rather than
+sharing `ChatService`'s: two independent connections to the same
+WAL-mode file coexist safely, which is simpler than giving two
+unrelated services shared ownership of one connection's lifecycle.
+
+## Streamlit UI
+
+`app.py` at the project root is what `streamlit run app.py` executes; it
+immediately hands off to `devmind.presentation.ui.app.run()`, which
+configures the page and builds `st.navigation` from four pages, each a
+module under `ui/pages/` exposing a single `render()` function: **Chat**,
+**Upload Documents**, **Knowledge Base** and **Settings**.
+
+Every page reaches the rest of the application through exactly two
+calls, `get_chat_service()` and `get_knowledge_base_service()`
+(`ui/services.py`). Streamlit reruns the whole script on every
+interaction, so both are wrapped in `st.cache_resource`: the underlying
+`ChatService` / `KnowledgeBaseService` - and the SQLite connection and
+Foundry Local clients each owns - are built once per server process and
+reused, never reopened on a keystroke. In this deployment neither
+service's `close()` is ever called during normal operation: a
+cache-resource-held object lives for the server's lifetime, and the
+operating system reclaims the SQLite handle when the process exits,
+same as any other long-lived server would.
+
+Pages stay thin by design. Each does three things and nothing else:
+collect input, call one of the two services, and render the DTO that
+comes back. The one piece of local state is the Chat page's turn
+history in `st.session_state` - purely a transcript of what was shown,
+not conversational memory fed back into retrieval, since
+`AnswerQueryUseCase` answers each question independently. Every call
+into a service is wrapped in `except (DevMindError, ValueError)`: the
+exceptions raised from Sprint 4 onward already carry actionable text
+(an unreachable Foundry Local error includes the `foundry service start`
+hint), so the UI's error handling is rendering that text with `st.error`,
+not writing new messages.
+
+Uploaded files are saved by name only - `Path(uploaded_file.name).name`
+strips any directory component the browser might send - into the
+configured documents directory, so an upload can never write outside
+it.
 
 ## Configuration
 

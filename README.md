@@ -74,12 +74,15 @@ See [docs/architecture.md](docs/architecture.md) for the layer rules in detail.
 
 ```
 .
+├── app.py                     # Streamlit entry point: streamlit run app.py
 ├── devmind/
 │   ├── core/                  # Config, logging, base exceptions
 │   ├── domain/                # entities/, value_objects/, repositories/
-│   ├── application/           # dto/, interfaces/, use_cases/
-│   ├── infrastructure/        # persistence/, parsers/, embeddings/, llm/
-│   └── presentation/          # ui/
+│   ├── application/           # dto/, interfaces/, use_cases/, prompt_builder.py
+│   ├── infrastructure/        # persistence/, parsers/, chunking/, embeddings/,
+│   │                          # llm/, chat_service.py, knowledge_base_service.py
+│   └── presentation/
+│       └── ui/                # app.py (navigation), services.py, pages/
 ├── data/
 │   ├── documents/             # Source documents (git-ignored)
 │   └── db/                    # SQLite database (git-ignored)
@@ -91,6 +94,17 @@ See [docs/architecture.md](docs/architecture.md) for the layer rules in detail.
 ├── requirements.txt
 └── requirements-dev.txt
 ```
+
+## Running the application
+
+With Foundry Local running and the virtual environment active:
+
+```bash
+streamlit run app.py
+```
+
+Open the printed local URL and use the sidebar to move between **Chat**,
+**Upload Documents**, **Knowledge Base** and **Settings**.
 
 ## Getting started
 
@@ -164,7 +178,7 @@ mypy devmind
 | 5      | Semantic search over the stored vectors             | Done        |
 | 6      | Grounded answer generation via Foundry Local         | Done        |
 | 7      | Chat Service: the wired, single-call entry point     | Done        |
-| 8      | Streamlit user interface                            | Planned     |
+| 8      | Streamlit user interface                            | Done        |
 
 ## License
 
