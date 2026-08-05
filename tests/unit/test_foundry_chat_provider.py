@@ -66,10 +66,18 @@ def _echo_answer(_model: str, _messages: list[dict[str, str]]) -> FakeResponse:
 
 
 def make_provider(
-    client: Any, *, max_tokens: int = 512, temperature: float = 0.1
+    client: Any,
+    *,
+    max_tokens: int = 512,
+    temperature: float = 0.1,
+    disable_thinking: bool = False,
 ) -> FoundryChatProvider:
     return FoundryChatProvider(
-        client=client, model="phi-3.5-mini", max_tokens=max_tokens, temperature=temperature
+        client=client,
+        model="phi-3.5-mini",
+        max_tokens=max_tokens,
+        temperature=temperature,
+        disable_thinking=disable_thinking,
     )
 
 
@@ -111,6 +119,26 @@ def test_the_configured_model_is_requested() -> None:
     make_provider(client).complete(PROMPT)
 
     assert client.chat.completions.calls[0]["model"] == "phi-3.5-mini"
+
+
+def test_thinking_is_left_untouched_by_default() -> None:
+    client = FakeClient()
+
+    make_provider(client).complete(PROMPT)
+
+    sent = client.chat.completions.calls[0]["messages"]
+    assert sent[1] == {"role": "user", "content": PROMPT.user}
+
+
+def test_disabling_thinking_appends_the_qwen3_no_think_directive() -> None:
+    client = FakeClient()
+
+    make_provider(client, disable_thinking=True).complete(PROMPT)
+
+    sent = client.chat.completions.calls[0]["messages"]
+    assert sent[1] == {"role": "user", "content": f"{PROMPT.user} /no_think"}
+    # The system prompt is untouched - only the user turn carries the directive.
+    assert sent[0] == {"role": "system", "content": PROMPT.system}
 
 
 # --------------------------------------------------------------------------- #

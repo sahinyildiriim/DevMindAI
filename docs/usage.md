@@ -17,8 +17,6 @@ Click **Index documents**. Each file is reported as it is processed:
 ✅ aspnet-core-routing.pdf: 12 chunk(s)
 🔄 dependency-injection.md: unchanged, skipped
 ✅ clean-architecture.md: 4 chunk(s)
-Embedding new chunks...
-Embedded 16 chunk(s) in 2 batch(es).
 ```
 
 - **✅** - the file was new or had changed since the last upload, and was
@@ -29,6 +27,22 @@ Embedded 16 chunk(s) in 2 batch(es).
 - The embedding step runs once after every file in the batch, not once per
   file, so uploading several documents together is more efficient than
   uploading them one at a time.
+
+If anything needs embedding, a progress bar tracks that step so a large
+first upload never looks frozen:
+
+```
+Embedding documents... 52%
+██████████░░░░░░░░░
+Processed: 624 / 1200 chunks
+Current document: ASP.NET-Core.pdf
+```
+
+Once it finishes, the final count replaces the progress bar:
+
+```
+Embedded 1200 chunk(s) in 3 batch(es).
+```
 
 A file that fails - an unsupported format, or one larger than the
 configured limit - is reported inline without affecting the others:
@@ -52,6 +66,16 @@ The **Knowledge Base** page answers three questions at a glance:
   - *"Stored embeddings were produced with X, but Y is now configured"* -
     the embedding model was changed after documents were indexed; re-run
     indexing on the Upload Documents page to bring it up to date.
+
+  Whenever chunks are awaiting embedding, an **Embed pending chunks**
+  button appears underneath. This is the button to use if embedding did
+  not run automatically the first time - for instance because Foundry
+  Local was not running yet when documents were uploaded. Re-uploading
+  the same files again would not help in that case: an unchanged file
+  is skipped, and skipped files never trigger embedding, so if the
+  embedding step failed the first time, this button is what actually
+  finishes the job. It shows the same progress bar described above
+  while it runs.
 - **What is indexed?** - a table of every document, its format, size and
   last modification time.
 

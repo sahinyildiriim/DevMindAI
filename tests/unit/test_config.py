@@ -41,6 +41,18 @@ def test_load_reads_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.retrieval.top_k == 8
 
 
+def test_disable_thinking_defaults_to_false() -> None:
+    assert FoundryConfig().disable_thinking is False
+
+
+def test_disable_thinking_is_read_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEVMIND_FOUNDRY_DISABLE_THINKING", "true")
+
+    settings = Settings.load(env_file=None)
+
+    assert settings.foundry.disable_thinking is True
+
+
 def test_relative_paths_resolve_against_project_root(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DEVMIND_DB_PATH", "data/db/custom.db")
 

@@ -80,12 +80,22 @@ def _index_uploaded_files(uploaded_files: list[UploadedFile]) -> None:
                 any_new_chunks = True
 
         if any_new_chunks:
-            status.write("Embedding new chunks...")
+            progress_box = st.empty()
+
+            def on_progress(embedded: int, pending: int, document: str) -> None:
+                fraction = embedded / pending
+                with progress_box.container():
+                    st.progress(fraction, text=f"Embedding documents... {fraction:.0%}")
+                    st.caption(f"Processed: {embedded} / {pending} chunks")
+                    st.caption(f"Current document: {document}")
+
             try:
-                run = service.embed_pending()
+                run = service.embed_pending(on_progress=on_progress)
             except DevMindError as exc:
                 status.write(f":x: {log_and_format('Embedding pending chunks', exc)}")
             else:
                 status.write(f"Embedded {run.embedded} chunk(s) in {run.batches} batch(es).")
+            finally:
+                progress_box.empty()
 
         status.update(label="Indexing complete", state="complete")

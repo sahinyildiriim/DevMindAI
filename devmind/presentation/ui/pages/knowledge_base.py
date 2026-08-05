@@ -58,6 +58,37 @@ def _render_stats(stats: KnowledgeBaseStats) -> None:
 
     if stats.pending_embedding_count:
         st.caption(f"{stats.pending_embedding_count} chunk(s) awaiting embedding.")
+        if st.button("Embed pending chunks", type="primary"):
+            _embed_pending()
+
+
+def _embed_pending() -> None:
+    """Run the embedding step and refresh the page with its outcome.
+
+    Uses ``st.toast`` rather than ``st.error`` / ``st.success`` for the
+    outcome: the page reruns immediately afterwards so the stats above
+    reflect the new state, and a toast is the one Streamlit element
+    guaranteed to still be visible after that rerun.
+    """
+    progress_box = st.empty()
+
+    def on_progress(embedded: int, pending: int, document: str) -> None:
+        fraction = embedded / pending
+        with progress_box.container():
+            st.progress(fraction, text=f"Embedding documents... {fraction:.0%}")
+            st.caption(f"Processed: {embedded} / {pending} chunks")
+            st.caption(f"Current document: {document}")
+
+    try:
+        service = get_knowledge_base_service()
+        run = service.embed_pending(on_progress=on_progress)
+    except DevMindError as exc:
+        st.toast(f":x: {log_and_format('Embedding pending chunks', exc)}")
+        return
+    finally:
+        progress_box.empty()
+    st.toast(f":white_check_mark: Embedded {run.embedded} chunk(s) in {run.batches} batch(es).")
+    st.rerun()
 
 
 def _render_documents(documents: tuple[DocumentMetadata, ...]) -> None:

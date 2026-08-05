@@ -7,7 +7,24 @@ and version numbers follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- Embedding now reports its progress live: a progress bar plus the
+  number of chunks embedded so far and the document currently being
+  processed, shown both while uploading new documents and when using
+  the Embed pending chunks button. Previously a long first embedding
+  run gave no feedback until it finished, which could make the
+  application look frozen.
+
+### Fixed
+
+- The Knowledge Base page now shows an **Embed pending chunks** button
+  whenever chunks are awaiting embedding. Previously, embedding only ran
+  automatically right after uploading new or changed files; if that run
+  never happened - for instance because Foundry Local was not yet
+  running - there was no way to trigger it afterwards, since re-uploading
+  an unchanged file is always skipped and a skipped file never triggers
+  embedding.
 
 ## [1.0.0] - 2026-07-30
 

@@ -222,6 +222,7 @@ class FoundryConfig:
     temperature: float = 0.1
     embedding_batch_size: int = 16
     max_retries: int = 2
+    disable_thinking: bool = False
 
     def __post_init__(self) -> None:
         """Validate the endpoint URL and generation parameters."""
@@ -256,6 +257,7 @@ class FoundryConfig:
             temperature=_read_env("DEVMIND_FOUNDRY_TEMPERATURE", 0.1, float),
             embedding_batch_size=_read_env("DEVMIND_FOUNDRY_EMBEDDING_BATCH_SIZE", 16, int),
             max_retries=_read_env("DEVMIND_FOUNDRY_MAX_RETRIES", 2, int),
+            disable_thinking=_read_env("DEVMIND_FOUNDRY_DISABLE_THINKING", False, _to_bool),
         )
 
 

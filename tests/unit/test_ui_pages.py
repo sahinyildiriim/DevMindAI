@@ -29,6 +29,11 @@ def isolated_knowledge_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv("DEVMIND_DB_PATH", str(tmp_path / "devmind.db"))
     monkeypatch.setenv("DEVMIND_LOG_DIR", str(tmp_path / "logs"))
     monkeypatch.setenv("DEVMIND_DOCUMENTS_DIR", str(tmp_path / "documents"))
+    # Settings otherwise fall back to whatever the developer's own .env
+    # configures, which would make this test's expectations depend on
+    # the machine it runs on.
+    monkeypatch.setenv("DEVMIND_FOUNDRY_CHAT_MODEL", "phi-3.5-mini")
+    monkeypatch.setenv("DEVMIND_FOUNDRY_EMBEDDING_MODEL", "all-minilm-l6-v2")
     st.cache_resource.clear()
     yield
     st.cache_resource.clear()
@@ -163,3 +168,31 @@ def test_an_os_rejected_file_name_is_reported_without_crashing_the_page() -> Non
     assert not at.exception
     messages = [element.value for element in at.markdown]
     assert any("report<1>.md" in message for message in messages)
+
+
+def test_embed_pending_button_reports_the_failure_without_crashing(tmp_path: Path) -> None:
+    # Indexing and rendering both run inside the one simulated script,
+    # for the same reason test_knowledge_base_page_reflects_an_indexed_document
+    # does: a cache_resource-backed service built outside of any
+    # AppTest-run script can leave its cache lock in a state that later
+    # hangs a script reading the same cache.
+    source = tmp_path / "routing.md"
+    source.write_text("Endpoint routing matches incoming requests.\n", encoding="utf-8")
+    script = (
+        "from pathlib import Path\n"
+        "from devmind.presentation.ui.pages import knowledge_base\n"
+        "from devmind.presentation.ui.services import get_knowledge_base_service\n"
+        f"get_knowledge_base_service().index_document(Path(r'{source}'))\n"
+        "knowledge_base.render()\n"
+    )
+    at = AppTest.from_string(script, default_timeout=_UPLOAD_TIMEOUT_SECONDS).run()
+    assert any(button.label == "Embed pending chunks" for button in at.button)
+
+    at.button[0].click().run()
+
+    assert not at.exception
+    assert any("Cannot reach the embedding model" in toast.value for toast in at.toast)
+    # The failed attempt changed nothing: still 1 chunk, still unembedded.
+    metrics = {metric.label: metric.value for metric in at.metric}
+    assert metrics["Chunks"] == "1"
+    assert metrics["Embedded"] == "0 / 1"

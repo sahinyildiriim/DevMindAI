@@ -19,7 +19,7 @@ from pathlib import Path
 from devmind.application.dto.embedding_run import EmbeddingRun
 from devmind.application.dto.indexing_result import IndexingResult
 from devmind.application.dto.knowledge_base_stats import KnowledgeBaseStats
-from devmind.application.use_cases.embed_chunks import EmbedChunksUseCase
+from devmind.application.use_cases.embed_chunks import EmbedChunksUseCase, ProgressCallback
 from devmind.application.use_cases.get_knowledge_base_stats import GetKnowledgeBaseStatsUseCase
 from devmind.application.use_cases.index_document import IndexDocumentUseCase
 from devmind.core.config import Settings, get_settings
@@ -83,8 +83,12 @@ class KnowledgeBaseService:
         """
         return self._index_document.execute(source_path)
 
-    def embed_pending(self) -> EmbeddingRun:
+    def embed_pending(self, on_progress: ProgressCallback | None = None) -> EmbeddingRun:
         """Embed every chunk that does not have one yet.
+
+        Args:
+            on_progress: Called after each batch is written; see
+                :meth:`EmbedChunksUseCase.execute`.
 
         Returns:
             What the run accomplished.
@@ -94,7 +98,7 @@ class KnowledgeBaseService:
             StorageError: If the knowledge base cannot be read or
                 written.
         """
-        return self._embed_chunks.execute()
+        return self._embed_chunks.execute(on_progress)
 
     def get_stats(self) -> KnowledgeBaseStats:
         """Read a fresh snapshot of the knowledge base.

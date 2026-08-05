@@ -452,6 +452,31 @@ work, rather than approximating it from a separate, looser count. When
 nothing has been embedded yet, the model is reported as current: there
 is no stale model to warn about, only work still to be done.
 
+The Upload Documents page's automatic embedding run only fires when that
+upload actually indexed something new - re-uploading unchanged files
+never does, by design (see above). That leaves a real gap when the
+automatic run itself never happened, most commonly because Foundry
+Local was not yet running at upload time: nothing in the UI would
+otherwise let it be retried, since re-uploading the same files again
+only re-triggers the same no-op. The Knowledge Base page closes it: any
+time `pending_embedding_count` is non-zero, it shows an **Embed pending
+chunks** button that calls `KnowledgeBaseService.embed_pending()`
+directly - the same call the upload flow makes, just reachable on its
+own. The outcome is reported with `st.toast`, not `st.success` /
+`st.error`: the page reruns immediately afterwards so the stats above
+reflect the new state, and a toast is the one Streamlit element
+guaranteed to still be visible once that rerun completes.
+
+A first embedding run over a large upload can take a while, with nothing
+in the UI otherwise changing until it finishes. `EmbedChunksUseCase.execute`
+accepts an optional `on_progress: ProgressCallback` - `(embedded, pending,
+document_title) -> None` - invoked after every batch is written. Both call
+sites (the Upload Documents page's automatic run and the Knowledge Base
+page's **Embed pending chunks** button) pass a callback that redraws a
+`st.progress` bar and the current chunk count and document title into a
+placeholder (`st.empty()`), so the run's progress is visible the whole
+time rather than only once it completes.
+
 `KnowledgeBaseService` (`infrastructure/knowledge_base_service.py`) is
 the composition root for these two use cases plus `EmbedChunksUseCase`,
 mirroring `ChatService`. It opens its own `SqliteDatabase` rather than

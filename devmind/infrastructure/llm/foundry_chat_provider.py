@@ -25,7 +25,14 @@ _logger = get_logger(__name__)
 class FoundryChatProvider(ChatProvider):
     """Generates completions through a locally running Foundry Local model."""
 
-    def __init__(self, client: OpenAI, model: str, max_tokens: int, temperature: float) -> None:
+    def __init__(
+        self,
+        client: OpenAI,
+        model: str,
+        max_tokens: int,
+        temperature: float,
+        disable_thinking: bool = False,
+    ) -> None:
         """Initialise the provider.
 
         Args:
@@ -33,6 +40,13 @@ class FoundryChatProvider(ChatProvider):
             model: Identifier of the chat model to call.
             max_tokens: Upper bound on the length of a generated answer.
             temperature: Sampling temperature passed to the model.
+            disable_thinking: Whether to append Qwen3's ``/no_think``
+                directive to the user message. Reasoning ("thinking")
+                models emit a ``<think>...</think>`` block before their
+                answer; Qwen3's chat template treats this suffix as a
+                request to skip straight to the answer instead. Models
+                without a thinking mode simply see it as inert trailing
+                text.
 
         Raises:
             ValueError: If the model is unnamed, ``max_tokens`` is not
@@ -49,6 +63,7 @@ class FoundryChatProvider(ChatProvider):
         self._model = model
         self._max_tokens = max_tokens
         self._temperature = temperature
+        self._disable_thinking = disable_thinking
 
     @property
     def model(self) -> str:
@@ -68,12 +83,13 @@ class FoundryChatProvider(ChatProvider):
             GenerationError: If Foundry Local is unreachable or failing,
                 or if it returns no usable text.
         """
+        user_message = f"{prompt.user} /no_think" if self._disable_thinking else prompt.user
         try:
             response = self._client.chat.completions.create(
                 model=self._model,
                 messages=[
                     {"role": "system", "content": prompt.system},
-                    {"role": "user", "content": prompt.user},
+                    {"role": "user", "content": user_message},
                 ],
                 max_tokens=self._max_tokens,
                 temperature=self._temperature,
@@ -135,4 +151,5 @@ def build_chat_provider(config: FoundryConfig | None = None) -> FoundryChatProvi
         model=foundry.chat_model,
         max_tokens=foundry.max_tokens,
         temperature=foundry.temperature,
+        disable_thinking=foundry.disable_thinking,
     )

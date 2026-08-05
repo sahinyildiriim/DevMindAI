@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from time import perf_counter
 from typing import Final
 
@@ -15,12 +15,15 @@ from devmind.domain.repositories.embedding_repository import EmbeddingRepository
 from devmind.domain.repositories.metadata_repository import MetadataRepository
 from devmind.domain.value_objects.embedding import Embedding
 
-__all__ = ["EMBEDDING_MODEL_KEY", "EmbedChunksUseCase"]
+__all__ = ["EMBEDDING_MODEL_KEY", "EmbedChunksUseCase", "ProgressCallback"]
 
 _logger = get_logger(__name__)
 
 EMBEDDING_MODEL_KEY: Final[str] = "embedding_model"
 """Metadata entry recording which model the stored vectors come from."""
+
+ProgressCallback = Callable[[int, int, str], None]
+"""Called after each batch with (embedded, pending, current document title)."""
 
 
 class EmbedChunksUseCase:
@@ -61,8 +64,14 @@ class EmbedChunksUseCase:
         self._provider = provider
         self._batch_size = batch_size
 
-    def execute(self) -> EmbeddingRun:
+    def execute(self, on_progress: ProgressCallback | None = None) -> EmbeddingRun:
         """Embed every pending chunk and store the vectors.
+
+        Args:
+            on_progress: Called after each batch is written, with the
+                number of chunks embedded so far, the total pending at
+                the start of the run, and the title of the document the
+                batch's last chunk belongs to.
 
         Returns:
             What the run accomplished.
@@ -96,6 +105,8 @@ class EmbedChunksUseCase:
             _logger.info(
                 "Embedded %d/%d chunks (%d%%)", embedded, pending, embedded * 100 // pending
             )
+            if on_progress is not None:
+                on_progress(embedded, pending, batch[-1].metadata.display_title)
 
         self._metadata.put(EMBEDDING_MODEL_KEY, model)
         duration = perf_counter() - started_at
